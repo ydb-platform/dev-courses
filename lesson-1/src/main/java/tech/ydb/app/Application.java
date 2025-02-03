@@ -11,19 +11,26 @@ import tech.ydb.table.result.ResultSetReader;
  * @author Kirill Kurdyukov
  */
 public class Application {
-
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
-        try (YdbRepository ydbRepository = new YdbRepository()) {
-            System.out.println("Database is available! Result `SELECT 1;` command: " + ydbRepository.SelectOne());
+
+        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
+            try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                System.out.println("Database is available! Result `SELECT 1;` command: " +
+                        new YdbRepository(retryCtx).SelectOne());
+            }
         }
     }
 
-    public static class YdbRepository implements AutoCloseable {
-        private final GrpcTransport transport = GrpcTransport.forConnectionString(CONNECTION_STRING).build();
-        private final QueryClient queryClient = QueryClient.newClient(transport).build();
-        private final SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+    public static class YdbRepository {
+        private final SessionRetryContext retryCtx;
+
+        public YdbRepository(SessionRetryContext retryCtx) {
+            this.retryCtx = retryCtx;
+        }
 
         public int SelectOne() {
             QueryReader resultSet = retryCtx.supplyResult(session ->
@@ -35,12 +42,6 @@ public class Application {
             resultSetReader.next();
 
             return resultSetReader.getColumn(0).getInt32();
-        }
-
-        @Override
-        public void close() {
-            queryClient.close();
-            transport.close();
         }
     }
 }
