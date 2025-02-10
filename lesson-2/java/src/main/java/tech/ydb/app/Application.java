@@ -26,9 +26,9 @@ public class Application {
 
                 ticketsYdbRepository.createSchema();
 
-                ticketsYdbRepository.AddedTittle("Ticket 1");
-                ticketsYdbRepository.AddedTittle("Ticket 2");
-                ticketsYdbRepository.AddedTittle("Ticket 3");
+                ticketsYdbRepository.addedTittle("Ticket 1");
+                ticketsYdbRepository.addedTittle("Ticket 2");
+                ticketsYdbRepository.addedTittle("Ticket 3");
 
                 for (var ticket : ticketsYdbRepository.findAll()) {
                     System.out.println("Ticket: {id: " + ticket.id() + ", title: " + ticket.title() + ", timestamp: " + ticket.now() + "}");
@@ -67,7 +67,7 @@ public class Application {
             ).join().getStatus().expectSuccess("Can't drop table issues");
         }
 
-        public Title AddedTittle(String title) {
+        public Title addedTittle(String title) {
             var id = UUID.randomUUID();
             var now = Instant.now();
 

@@ -14,7 +14,6 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
-
         try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
