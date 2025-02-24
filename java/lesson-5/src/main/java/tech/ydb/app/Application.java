@@ -135,6 +135,11 @@ public class Application {
                 writerJob.join();
                 readerJob.join();
 
+                System.out.println("Print all tickets: ");
+                for (var ticket : ticketsYdbRepository.findAll()) {
+                    printTitle(ticket);
+                }
+
                 ticketsYdbRepository.dropSchema();
             }
         }
