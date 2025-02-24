@@ -83,16 +83,86 @@ public class Application {
             this.retryCtx = retryCtx;
         }
 
+        public List<Pair<UUID, Long>> linkTicketsNoInteractive(UUID idT1, UUID idT2) {
+            var valueReader = retryCtx.supplyResult(
+                    session -> QueryReader.readFrom(session.createQuery(
+                            """
+                                    DECLARE $t1 AS UUID;
+                                    DECLARE $t2 AS UUID;
+                                                                        
+                                    UPDATE issues
+                                    SET link_count = link_count + 1
+                                    WHERE id IN ($t1, $t2);
+                                                                        
+                                    INSERT INTO links (source, destination)
+                                    VALUES ($t1, $t2), ($t2, $t1);
+
+                                    SELECT id, link_count FROM issues
+                                    WHERE id IN ($t1, $t2)
+                                    """,
+                            TxMode.SERIALIZABLE_RW,
+                            Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
+                    ))
+            ).join().getValue();
+
+            return getLinkTicketPairs(valueReader);
+        }
+
+        public List<Pair<UUID, Long>> linkTicketsInteractive(UUID idT1, UUID idT2) {
+            return retryCtx.supplyResult(
+                    session -> {
+                        var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+                        tx.createQuery("""
+                                DECLARE $t1 AS UUID;
+                                DECLARE $t2 AS UUID;
+                                                             
+                                UPDATE issues
+                                SET link_count = link_count + 1
+                                WHERE id IN ($t1, $t2);
+                                """, Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
+                        ).execute().join();
+
+                        tx.createQuery("""
+                                        DECLARE $t1 AS UUID;
+                                        DECLARE $t2 AS UUID;
+                                                                            
+                                        INSERT INTO links (source, destination)
+                                        VALUES ($t1, $t2), ($t2, $t1);
+                                        """,
+                                Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
+                        ).execute().join();
+
+                        var valueReader = QueryReader.readFrom(
+                                tx.createQueryWithCommit("""
+                                                DECLARE $t1 AS UUID;
+                                                DECLARE $t2 AS UUID;
+                                                                                    
+                                                SELECT id, link_count FROM issues
+                                                WHERE id IN ($t1, $t2)
+                                                """,
+                                        Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2)))
+                        ).join().getValue();
+
+                        var linkTicketPairs = getLinkTicketPairs(valueReader);
+
+                        return CompletableFuture.completedFuture(Result.success(linkTicketPairs));
+                    }
+            ).join().getValue();
+        }
+
         public void createSchema() {
             retryCtx.supplyResult(
                     session -> session.createQuery(
-                            "CREATE TABLE issues (" +
-                                    "id UUID NOT NULL, " +
-                                    "title Text, " +
-                                    "created_at Timestamp, " +
-                                    "author Text, " +
-                                    "PRIMARY KEY (id)" +
-                                    ")", TxMode.NONE
+                            """
+                                    CREATE TABLE issues (
+                                        id UUID NOT NULL,
+                                        title Text,
+                                        created_at Timestamp,
+                                        author Text,
+                                        PRIMARY KEY (id)
+                                    );
+                                    """, TxMode.NONE
                     ).execute()
             ).join().getStatus().expectSuccess("Can't create table issues");
 
@@ -135,13 +205,14 @@ public class Application {
 
             retryCtx.supplyResult(
                     session -> session.createQuery(
-                            "" +
-                                    "DECLARE $id AS UUID; " +
-                                    "DECLARE $title AS Text; " +
-                                    "DECLARE $created_at AS Timestamp; " +
-                                    "DECLARE $author AS Text; " +
-                                    "UPSERT INTO issues (id, title, created_at, author, link_count) " +
-                                    "VALUES ($id, $title, $created_at, $author, 0)",
+                            """
+                                    DECLARE $id AS UUID;
+                                    DECLARE $title AS Text;
+                                    DECLARE $created_at AS Timestamp;
+                                    DECLARE $author AS Text;
+                                    UPSERT INTO issues (id, title, created_at, author, link_count)
+                                    VALUES ($id, $title, $created_at, $author, 0);
+                                    """,
                             TxMode.SERIALIZABLE_RW,
                             Params.of(
                                     "$id", PrimitiveValue.newUuid(id),
@@ -156,10 +227,8 @@ public class Application {
         public List<Title> findAll() {
             var titles = new ArrayList<Title>();
             var resultSet = retryCtx.supplyResult(session -> QueryReader.readFrom(
-                    session.createQuery(
-                            "SELECT id, title, created_at, author, link_count FROM issues;",
-                            TxMode.SERIALIZABLE_RW
-                    )
+                    session.createQuery("SELECT id, title, created_at, author, link_count FROM issues;",
+                            TxMode.SERIALIZABLE_RW)
             )).join().getValue();
 
             var resultSetReader = resultSet.getResultSet(0);
@@ -180,12 +249,13 @@ public class Application {
         public Title findByAuthor(String author) {
             var resultSet = retryCtx.supplyResult(
                     session -> QueryReader.readFrom(
-                            session.createQuery("" +
-                                            "DECLARE $author AS Text; " +
-                                            "SELECT id, title, created_at, author, link_count FROM issues VIEW authorIndex " +
-                                            "WHERE author = $author;",
-                                    TxMode.SERIALIZABLE_RW,
-                                    Params.of("$author", PrimitiveValue.newText(author))
+                            session.createQuery(
+                                    """
+                                            DECLARE $author AS Text;
+                                            SELECT id, title, created_at, author, link_count FROM issues VIEW authorIndex
+                                            WHERE author = $author;
+                                            """,
+                                    TxMode.SERIALIZABLE_RW, Params.of("$author", PrimitiveValue.newText(author))
                             )
                     )
             ).join().getValue();
@@ -200,81 +270,6 @@ public class Application {
                     resultSetReader.getColumn(3).getText(),
                     resultSetReader.getColumn(4).getInt64()
             );
-        }
-
-        public List<Pair<UUID, Long>> linkTicketsNoInteractive(UUID idT1, UUID idT2) {
-            var valueReader = retryCtx.supplyResult(
-                    session -> QueryReader.readFrom(session.createQuery(
-                            """
-                                    -- объявляем параметры запросов, как аргументы у функций в компилируемых языках
-                                    DECLARE $t1 AS UUID;
-                                    DECLARE $t2 AS UUID;
-                                                                        
-                                    -- обновляем счётчик связей в обоих тикетах
-                                    UPDATE issues
-                                    SET link_count = link_count + 1
-                                    WHERE id IN ($t1, $t2);
-                                                                        
-                                    -- Добавляем связи между тикетами в обе стороны - чтобы для любого тикета можно было быстро найти связанные
-                                    -- Если такая связь уже есть - оператор INSERT завершится с ошибкой и транзакция откатится
-                                    INSERT INTO links (source, destination)
-                                    VALUES ($t1, $t2), ($t2, $t1);
-                                                                        
-                                    -- Получаем актуальные значения счётчиков после обновления
-                                    SELECT id, link_count FROM issues
-                                    WHERE id IN ($t1, $t2)
-                                    """,
-                            TxMode.SERIALIZABLE_RW,
-                            Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
-                    ))
-            ).join().getValue();
-
-            return getLinkTicketPairs(valueReader);
-        }
-
-        public List<Pair<UUID, Long>> linkTicketsInteractive(UUID idT1, UUID idT2) {
-            return retryCtx.supplyResult(
-                    session -> {
-                        var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-
-                        tx.createQuery("""
-                                DECLARE $t1 AS UUID;
-                                DECLARE $t2 AS UUID;
-                                                             
-                                UPDATE issues
-                                SET link_count = link_count + 1
-                                WHERE id IN ($t1, $t2);
-                                """, Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
-                        ).execute().join();
-
-                        tx.createQuery("""
-                                        DECLARE $t1 AS UUID;
-                                        DECLARE $t2 AS UUID;
-                                                                            
-                                        INSERT INTO links (source, destination)
-                                        VALUES ($t1, $t2), ($t2, $t1);
-                                        """,
-                                Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
-                        ).execute().join();
-
-                        var valueReader = QueryReader.readFrom(
-                                tx.createQuery("""
-                                                DECLARE $t1 AS UUID;
-                                                DECLARE $t2 AS UUID;
-                                                                                    
-                                                SELECT id, link_count FROM issues
-                                                WHERE id IN ($t1, $t2)
-                                                """,
-                                        Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2)))
-                        ).join().getValue();
-
-                        tx.commit().join();
-
-                        var linkTicketPairs = getLinkTicketPairs(valueReader);
-
-                        return CompletableFuture.completedFuture(Result.success(linkTicketPairs));
-                    }
-            ).join().getValue();
         }
 
         private static ArrayList<Pair<UUID, Long>> getLinkTicketPairs(QueryReader valueReader) {
