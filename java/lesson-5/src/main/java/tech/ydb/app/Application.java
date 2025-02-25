@@ -32,31 +32,31 @@ public class Application {
     public static void main(String[] args) throws InterruptedException {
         try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
-                var ticketsYdbRepository = new TicketsYdbRepository(SessionRetryContext.create(queryClient).build());
+                try (TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
+                    var ticketsYdbRepository = new TicketsYdbRepository(SessionRetryContext.create(queryClient).build());
 
-                ticketsYdbRepository.createSchema();
+                    ticketsYdbRepository.createSchema();
 
-                ticketsYdbRepository.addedTittle("Ticket 1", "Author 1");
-                ticketsYdbRepository.addedTittle("Ticket 2", "Author 2");
-                ticketsYdbRepository.addedTittle("Ticket 3", "Author 3");
+                    ticketsYdbRepository.addedTittle("Ticket 1", "Author 1");
+                    ticketsYdbRepository.addedTittle("Ticket 2", "Author 2");
+                    ticketsYdbRepository.addedTittle("Ticket 3", "Author 3");
 
-                var allTickets = ticketsYdbRepository.findAll();
+                    var allTickets = ticketsYdbRepository.findAll();
 
-                System.out.println("Print all tickets: ");
-                for (var ticket : allTickets) {
-                    printTitle(ticket);
-                }
+                    System.out.println("Print all tickets: ");
+                    for (var ticket : allTickets) {
+                        printTitle(ticket);
+                    }
 
-                System.out.println("Update status all tickets: NULL -> OPEN ");
-                for (var ticket : allTickets) {
-                    ticketsYdbRepository.updateStatus(ticket.id, "OPEN");
-                }
+                    System.out.println("Update status all tickets: NULL -> OPEN ");
+                    for (var ticket : allTickets) {
+                        ticketsYdbRepository.updateStatus(ticket.id, "OPEN");
+                    }
 
-                var stopped_process = new AtomicBoolean();
+                    var stopped_process = new AtomicBoolean();
 
-                var writerJob = CompletableFuture.runAsync(
-                        () -> {
-                            try (TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
+                    var writerJob = CompletableFuture.runAsync(
+                            () -> {
                                 var writer = topicClient.createSyncWriter(
                                         WriterSettings.newBuilder()
                                                 .setProducerId("producer-task_status")
@@ -83,12 +83,10 @@ public class Application {
 
                                 System.out.println("Stopped write worker!");
                             }
-                        }
-                );
+                    );
 
-                var readerJob = CompletableFuture.runAsync(
-                        () -> {
-                            try (TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
+                    var readerJob = CompletableFuture.runAsync(
+                            () -> {
                                 var reader = topicClient.createSyncReader(
                                         ReaderSettings.newBuilder()
                                                 .setConsumerName("email")
@@ -120,27 +118,27 @@ public class Application {
 
                                 System.out.println("Stopped read worker!");
                             }
-                        }
-                );
+                    );
 
-                System.out.println("Update status all tickets: OPEN -> IN_PROGRESS ");
-                for (var ticket : allTickets) {
-                    ticketsYdbRepository.updateStatus(ticket.id, "IN_PROGRESS");
+                    System.out.println("Update status all tickets: OPEN -> IN_PROGRESS ");
+                    for (var ticket : allTickets) {
+                        ticketsYdbRepository.updateStatus(ticket.id, "IN_PROGRESS");
+                    }
+
+                    Thread.sleep(5_000);
+
+                    stopped_process.set(true);
+
+                    writerJob.join();
+                    readerJob.join();
+
+                    System.out.println("Print all tickets: ");
+                    for (var ticket : ticketsYdbRepository.findAll()) {
+                        printTitle(ticket);
+                    }
+
+                    ticketsYdbRepository.dropSchema();
                 }
-
-                Thread.sleep(5_000);
-
-                stopped_process.set(true);
-
-                writerJob.join();
-                readerJob.join();
-
-                System.out.println("Print all tickets: ");
-                for (var ticket : ticketsYdbRepository.findAll()) {
-                    printTitle(ticket);
-                }
-
-                ticketsYdbRepository.dropSchema();
             }
         }
     }
