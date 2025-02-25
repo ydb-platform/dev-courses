@@ -30,116 +30,110 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) throws InterruptedException {
-        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
-            try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
-                try (TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
-                    var ticketsYdbRepository = new TicketsYdbRepository(SessionRetryContext.create(queryClient).build());
+        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build();
+             QueryClient queryClient = QueryClient.newClient(grpcTransport).build();
+             TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
+            var ticketsYdbRepository = new TicketsYdbRepository(SessionRetryContext.create(queryClient).build());
 
-                    ticketsYdbRepository.createSchema();
+            ticketsYdbRepository.createSchema();
 
-                    ticketsYdbRepository.addedTittle("Ticket 1", "Author 1");
-                    ticketsYdbRepository.addedTittle("Ticket 2", "Author 2");
-                    ticketsYdbRepository.addedTittle("Ticket 3", "Author 3");
+            ticketsYdbRepository.addedTittle("Ticket 1", "Author 1");
+            ticketsYdbRepository.addedTittle("Ticket 2", "Author 2");
+            ticketsYdbRepository.addedTittle("Ticket 3", "Author 3");
 
-                    var allTickets = ticketsYdbRepository.findAll();
+            var allTickets = ticketsYdbRepository.findAll();
 
-                    System.out.println("Print all tickets: ");
-                    for (var ticket : allTickets) {
-                        printTitle(ticket);
-                    }
-
-                    System.out.println("Update status all tickets: NULL -> OPEN ");
-                    for (var ticket : allTickets) {
-                        ticketsYdbRepository.updateStatus(ticket.id, "OPEN");
-                    }
-
-                    var stopped_process = new AtomicBoolean();
-
-                    var writerJob = CompletableFuture.runAsync(
-                            () -> {
-                                var writer = topicClient.createSyncWriter(
-                                        WriterSettings.newBuilder()
-                                                .setProducerId("producer-task_status")
-                                                .setTopicPath("task_status")
-                                                .build()
-                                );
-
-                                System.out.println("Started write worker!");
-
-                                writer.initAndWait();
-
-                                while (!stopped_process.get()) {
-                                    for (var request : ticketsYdbRepository.getUpdatesStatusRequests()) {
-                                        writer.send(Message.newBuilder()
-                                                .setSeqNo(request.id) // exactly once
-                                                .setData(
-                                                        ("[" + request.uuid + " : " + request.status + "]")
-                                                                .getBytes(StandardCharsets.UTF_8)
-                                                )
-                                                .build()
-                                        );
-                                    }
-                                }
-
-                                System.out.println("Stopped write worker!");
-                            }
-                    );
-
-                    var readerJob = CompletableFuture.runAsync(
-                            () -> {
-                                var reader = topicClient.createSyncReader(
-                                        ReaderSettings.newBuilder()
-                                                .setConsumerName("email")
-                                                .setTopics(List.of(
-                                                        TopicReadSettings.newBuilder()
-                                                                .setPath("task_status")
-                                                                .build()
-                                                ))
-                                                .build()
-                                );
-
-                                System.out.println("Started read worker!");
-
-                                reader.initAndWait();
-
-                                while (!stopped_process.get()) {
-                                    try {
-                                        var message = reader.receive(1, TimeUnit.SECONDS);
-
-                                        if (message == null) {
-                                            continue;
-                                        }
-
-                                        System.out.println("Received message: " + new String(message.getData()));
-                                    } catch (Exception e) {
-                                        // Ignored
-                                    }
-                                }
-
-                                System.out.println("Stopped read worker!");
-                            }
-                    );
-
-                    System.out.println("Update status all tickets: OPEN -> IN_PROGRESS ");
-                    for (var ticket : allTickets) {
-                        ticketsYdbRepository.updateStatus(ticket.id, "IN_PROGRESS");
-                    }
-
-                    Thread.sleep(5_000);
-
-                    stopped_process.set(true);
-
-                    writerJob.join();
-                    readerJob.join();
-
-                    System.out.println("Print all tickets: ");
-                    for (var ticket : ticketsYdbRepository.findAll()) {
-                        printTitle(ticket);
-                    }
-
-                    ticketsYdbRepository.dropSchema();
-                }
+            System.out.println("Print all tickets: ");
+            for (var ticket : allTickets) {
+                printTitle(ticket);
             }
+
+            System.out.println("Update status all tickets: NULL -> OPEN ");
+            for (var ticket : allTickets) {
+                ticketsYdbRepository.updateStatus(ticket.id, "OPEN");
+            }
+
+            var writer = topicClient.createSyncWriter(
+                    WriterSettings.newBuilder()
+                            .setProducerId("producer-task_status")
+                            .setTopicPath("task_status")
+                            .build()
+            );
+
+            var reader = topicClient.createSyncReader(
+                    ReaderSettings.newBuilder()
+                            .setConsumerName("email")
+                            .setTopics(List.of(TopicReadSettings.newBuilder().setPath("task_status").build()))
+                            .build()
+            );
+
+            var stopped_process = new AtomicBoolean();
+
+            var writerJob = CompletableFuture.runAsync(
+                    () -> {
+                        System.out.println("Started write worker!");
+
+                        writer.initAndWait();
+
+                        while (!stopped_process.get()) {
+                            for (var request : ticketsYdbRepository.getUpdatesStatusRequests()) {
+                                writer.send(Message.newBuilder()
+                                        .setSeqNo(request.id) // exactly once
+                                        .setData(
+                                                ("[" + request.uuid + " : " + request.status + "]")
+                                                        .getBytes(StandardCharsets.UTF_8)
+                                        )
+                                        .build()
+                                );
+                            }
+                        }
+
+                        System.out.println("Stopped write worker!");
+                    }
+            );
+
+            var readerJob = CompletableFuture.runAsync(
+                    () -> {
+                        System.out.println("Started read worker!");
+
+                        reader.initAndWait();
+
+                        while (!stopped_process.get()) {
+                            try {
+                                var message = reader.receive(1, TimeUnit.SECONDS);
+
+                                if (message == null) {
+                                    continue;
+                                }
+
+                                System.out.println("Received message: " + new String(message.getData()));
+                            } catch (Exception e) {
+                                // Ignored
+                            }
+                        }
+
+                        System.out.println("Stopped read worker!");
+                    }
+            );
+
+            System.out.println("Update status all tickets: OPEN -> IN_PROGRESS ");
+            for (var ticket : allTickets) {
+                ticketsYdbRepository.updateStatus(ticket.id, "IN_PROGRESS");
+            }
+
+            Thread.sleep(5_000);
+
+            stopped_process.set(true);
+
+            writerJob.join();
+            readerJob.join();
+
+            System.out.println("Print all tickets: ");
+            for (var ticket : ticketsYdbRepository.findAll()) {
+                printTitle(ticket);
+            }
+
+            ticketsYdbRepository.dropSchema();
         }
     }
 
