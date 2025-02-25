@@ -67,13 +67,14 @@ public class Application {
                             .build()
             );
 
+            writer.init();
+            reader.init();
+
             var stopped_process = new AtomicBoolean();
 
             var writerJob = CompletableFuture.runAsync(
                     () -> {
                         System.out.println("Started write worker!");
-
-                        writer.initAndWait();
 
                         while (!stopped_process.get()) {
                             for (var request : ticketsYdbRepository.getUpdatesStatusRequests()) {
@@ -95,8 +96,6 @@ public class Application {
             var readerJob = CompletableFuture.runAsync(
                     () -> {
                         System.out.println("Started read worker!");
-
-                        reader.initAndWait();
 
                         while (!stopped_process.get()) {
                             try {
