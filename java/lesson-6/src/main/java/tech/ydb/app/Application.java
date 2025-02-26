@@ -60,7 +60,8 @@ public class Application {
             reader.init();
 
             var stopped_read_process = new AtomicBoolean();
-            var readerJob = runReadJob(stopped_read_process, reader, retryCtx);
+
+            var readerJob = CompletableFuture.runAsync(() -> runReadJob(stopped_read_process, reader, retryCtx));
 
             String currentDirectory = System.getProperty("user.dir");
             try (var lines = Files.lines(Path.of(currentDirectory, PATH))) {
@@ -85,86 +86,82 @@ public class Application {
         }
     }
 
-    private static CompletableFuture<Void> runReadJob(AtomicBoolean stopped_read_process, SyncReader reader, SessionRetryContext retryCtx) {
-        return CompletableFuture.runAsync(
-                () -> {
-                    System.out.println("Started read worker!");
+    private static void runReadJob(AtomicBoolean stopped_read_process, SyncReader reader, SessionRetryContext retryCtx) {
+        System.out.println("Started read worker!");
 
-                    while (!stopped_read_process.get()) {
-                        try {
-                            var message = reader.receive(1, TimeUnit.SECONDS);
+        while (!stopped_read_process.get()) {
+            try {
+                var message = reader.receive(1, TimeUnit.SECONDS);
 
-                            if (message == null) {
-                                continue;
-                            }
+                if (message == null) {
+                    continue;
+                }
 
-                            retryCtx.supplyStatus(session -> {
-                                var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-                                var partitionId = message.getPartitionSession().getPartitionId();
+                retryCtx.supplyStatus(session -> {
+                    var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    var partitionId = message.getPartitionSession().getPartitionId();
 
-                                var queryReader = QueryReader.readFrom(
-                                        tx.createQuery("""
-                                                            DECLARE $partition_id AS Int64;
-                                                            SELECT last_offset FROM file_progress
-                                                            WHERE partition_id = $partition_id;
-                                                        """,
-                                                Params.of("$partition_id", PrimitiveValue.newInt64(partitionId)))
-                                ).join().getValue();
+                    var queryReader = QueryReader.readFrom(
+                            tx.createQuery("""
+                                                DECLARE $partition_id AS Int64;
+                                                SELECT last_offset FROM file_progress
+                                                WHERE partition_id = $partition_id;
+                                            """,
+                                    Params.of("$partition_id", PrimitiveValue.newInt64(partitionId)))
+                    ).join().getValue();
 
-                                var resultSet = queryReader.getResultSet(0);
-                                var lastOffset = resultSet.next() ? resultSet.getColumn(0).getInt64() : 0;
+                    var resultSet = queryReader.getResultSet(0);
+                    var lastOffset = resultSet.next() ? resultSet.getColumn(0).getInt64() : 0;
 
-                                if (lastOffset > message.getOffset()) {
-                                    message.commit().join();
-                                    tx.rollback().join();
+                    if (lastOffset > message.getOffset()) {
+                        message.commit().join();
+                        tx.rollback().join();
 
-                                    return CompletableFuture.completedFuture(Status.SUCCESS);
-                                }
-
-                                var messageData = new String(message.getData(), StandardCharsets.UTF_8).split(":");
-                                var name = messageData[0];
-                                var length = messageData[1].length();
-                                var lineNumber = message.getSeqNo();
-
-                                tx.createQuery(
-                                        """
-                                                    DECLARE $name AS Text;
-                                                    DECLARE $line AS Int64;
-                                                    DECLARE $length AS Int64;
-                                                    UPSERT INTO file(name, line, length) VALUES ($name, $line, $length);
-                                                """,
-                                        Params.of(
-                                                "$name", PrimitiveValue.newText(name),
-                                                "$line", PrimitiveValue.newInt64(lineNumber),
-                                                "$length", PrimitiveValue.newInt64(length)
-                                        )
-                                ).execute().join().getStatus().expectSuccess();
-
-                                tx.createQueryWithCommit(
-                                        """
-                                                    DECLARE $partition_id AS Int64;
-                                                    DECLARE $last_offset AS Int64;
-                                                    UPSERT INTO file_progress(partition_id, last_offset) VALUES ($partition_id, $last_offset);
-                                                """,
-                                        Params.of(
-                                                "$partition_id", PrimitiveValue.newInt64(partitionId),
-                                                "$last_offset", PrimitiveValue.newInt64(lastOffset)
-                                        )
-                                ).execute().join().getStatus().expectSuccess();
-
-                                message.commit().join();
-
-                                return CompletableFuture.completedFuture(Status.SUCCESS);
-                            }).join().expectSuccess();
-
-                        } catch (Exception e) {
-                            System.out.println(e.getMessage());
-                        }
+                        return CompletableFuture.completedFuture(Status.SUCCESS);
                     }
 
-                    System.out.println("Stopped read worker!");
-                }
-        );
+                    var messageData = new String(message.getData(), StandardCharsets.UTF_8).split(":");
+                    var name = messageData[0];
+                    var length = messageData[1].length();
+                    var lineNumber = message.getSeqNo();
+
+                    tx.createQuery(
+                            """
+                                        DECLARE $name AS Text;
+                                        DECLARE $line AS Int64;
+                                        DECLARE $length AS Int64;
+                                        UPSERT INTO file(name, line, length) VALUES ($name, $line, $length);
+                                    """,
+                            Params.of(
+                                    "$name", PrimitiveValue.newText(name),
+                                    "$line", PrimitiveValue.newInt64(lineNumber),
+                                    "$length", PrimitiveValue.newInt64(length)
+                            )
+                    ).execute().join().getStatus().expectSuccess();
+
+                    tx.createQueryWithCommit(
+                            """
+                                        DECLARE $partition_id AS Int64;
+                                        DECLARE $last_offset AS Int64;
+                                        UPSERT INTO file_progress(partition_id, last_offset) VALUES ($partition_id, $last_offset);
+                                    """,
+                            Params.of(
+                                    "$partition_id", PrimitiveValue.newInt64(partitionId),
+                                    "$last_offset", PrimitiveValue.newInt64(lastOffset)
+                            )
+                    ).execute().join().getStatus().expectSuccess();
+
+                    message.commit().join();
+
+                    return CompletableFuture.completedFuture(Status.SUCCESS);
+                }).join().expectSuccess();
+
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        System.out.println("Stopped read worker!");
     }
 
     private static void printTableFile(SessionRetryContext retryCtx) {
