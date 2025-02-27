@@ -79,9 +79,9 @@ public class Application {
 
             Thread.sleep(5_000);
             stopped_read_process.set(true);
-            printTableFile(retryCtx);
-
             readerJob.join();
+
+            printTableFile(retryCtx);
 
             dropSchema(retryCtx);
         }
