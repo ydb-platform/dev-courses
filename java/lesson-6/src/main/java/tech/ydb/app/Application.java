@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcTransport;
@@ -64,15 +65,56 @@ public class Application {
             var readerJob = CompletableFuture.runAsync(() -> runReadJob(stopped_read_process, reader, retryCtx));
 
             String currentDirectory = System.getProperty("user.dir");
-            try (var lines = Files.lines(Path.of(currentDirectory, PATH))) {
-                var lineNumber = new AtomicInteger(1);
+            var pathFile = Path.of(currentDirectory, PATH);
+
+            try (var lines = Files.lines(pathFile)) {
+                var queryReader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("""
+                                        DECLARE $name AS Text;
+                                        SELECT line_num FROM write_file_progress
+                                        WHERE name = $name;
+                                        """,
+                                TxMode.SERIALIZABLE_RW,
+                                Params.of("$name", PrimitiveValue.newText(pathFile.toString())))
+                        )).join().getValue();
+
+                var resultSet = queryReader.getResultSet(0);
+
+                long lineNumberLong = 1;
+                if (resultSet.next()) {
+                    lineNumberLong = resultSet.getColumn(0).getInt64();
+                }
+
+                var lineNumber = new AtomicLong(lineNumberLong);
+                var origLineNumber = new AtomicLong(1);
 
                 lines.forEach(line ->
-                        writer.send(Message.newBuilder()
-                                .setSeqNo(lineNumber.getAndIncrement())
-                                .setData((PATH + ":" + line).getBytes(StandardCharsets.UTF_8))
-                                .build()
-                        )
+                        {
+                            if (origLineNumber.getAndIncrement() < lineNumber.get()) {
+                                return;
+                            }
+
+                            writer.send(Message.newBuilder()
+                                    .setSeqNo(lineNumber.getAndIncrement())
+                                    .setData((PATH + ":" + line).getBytes(StandardCharsets.UTF_8))
+                                    .build()
+                            );
+                            writer.flush();
+
+                            retryCtx.supplyResult(
+                                    session -> session.createQuery("""
+                                                    DECLARE $name AS Text;
+                                                    DECLARE $line_num AS Int64;
+                                                                                            
+                                                    UPDATE write_file_progress SET line_num = $line_num
+                                                    WHERE name = $name;
+                                                    """,
+                                            TxMode.SERIALIZABLE_RW,
+                                            Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
+                                                    "$line_num", PrimitiveValue.newInt64(lineNumber.get()))
+                                    ).execute()
+                            ).join().getStatus().expectSuccess();
+                        }
                 );
             }
 
@@ -194,6 +236,12 @@ public class Application {
                     last_offset Int64 NOT NULL,
                     PRIMARY KEY (partition_id)
                 );
+                                
+                CREATE TABLE write_file_progress (
+                    name Text NOT NULL,
+                    line_num Int64 NOT NULL,
+                    PRIMARY KEY (name)
+                );
                                                     
                 CREATE TOPIC file_topic (
                     CONSUMER file_consumer
@@ -210,6 +258,7 @@ public class Application {
         executeSchema(retryCtx, """
                 DROP TABLE file;
                 DROP TABLE file_progress;
+                DROP TABLE write_file_progress;
                 DROP TOPIC file_topic;
                 """);
     }
