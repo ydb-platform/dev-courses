@@ -6,7 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -79,43 +81,57 @@ public class Application {
                 }
 
                 var lineNumber = new AtomicLong(lineNumberLong);
+                var origLineNumber = new AtomicLong(1);
 
-                lines.forEach(line ->
-                        retryCtx.supplyStatus(
-                                session -> {
-                                    var transaction = session.beginTransaction(TxMode.SERIALIZABLE_RW).join().getValue();
-                                    var writer = topicClient.createSyncWriter(
-                                            WriterSettings.newBuilder()
-                                                    .setProducerId("producer-file")
-                                                    .setTopicPath("file_topic")
-                                                    .build()
-                                    );
-                                    writer.initAndWait();
-                                    writer.send(
-                                            Message.newBuilder()
-                                                    .setSeqNo(lineNumber.getAndIncrement())
-                                                    .setData((PATH + ":" + line).getBytes(StandardCharsets.UTF_8))
-                                                    .build(),
-                                            SendSettings.newBuilder().setTransaction(transaction).build()
-                                    );
-                                    writer.flush();
+                lines.forEach(line -> {
+                            if (origLineNumber.getAndIncrement() < lineNumber.get()) {
+                                return;
+                            }
 
-                                    transaction.createQuery("""
-                                                    DECLARE $name AS Text;
-                                                    DECLARE $line_num AS Int64;
-                                                                                            
-                                                    UPDATE write_file_progress SET line_num = $line_num
-                                                    WHERE name = $name;
-                                                    """,
-                                            Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
-                                                    "$line_num", PrimitiveValue.newInt64(lineNumber.get()))
-                                    ).execute();
+                            var lineNumberCur = lineNumber.getAndIncrement();
+                            retryCtx.supplyStatus(
+                                    session -> {
+                                        var transaction = session.beginTransaction(TxMode.SERIALIZABLE_RW).join().getValue();
+                                        var writer = topicClient.createSyncWriter(
+                                                WriterSettings.newBuilder()
+                                                        .setProducerId("producer-file")
+                                                        .setTopicPath("file_topic")
+                                                        .build()
+                                        );
+                                        writer.initAndWait();
 
-                                    transaction.commit().join();
+                                        writer.send(
+                                                Message.newBuilder()
+                                                        .setSeqNo(lineNumberCur)
+                                                        .setData((PATH + ":" + line).getBytes(StandardCharsets.UTF_8))
+                                                        .build(),
+                                                SendSettings.newBuilder().setTransaction(transaction).build()
+                                        );
+                                        writer.flush();
 
-                                    return CompletableFuture.completedFuture(Status.SUCCESS);
-                                }
-                        ).join().expectSuccess()
+                                        transaction.createQuery("""
+                                                        DECLARE $name AS Text;
+                                                        DECLARE $line_num AS Int64;
+                                                                                                
+                                                        UPDATE write_file_progress SET line_num = $line_num
+                                                        WHERE name = $name;
+                                                        """,
+                                                Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
+                                                        "$line_num", PrimitiveValue.newInt64(lineNumber.get()))
+                                        ).execute();
+
+                                        transaction.commit().join();
+
+                                        try {
+                                            writer.shutdown(10, TimeUnit.SECONDS);
+                                        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                                            throw new RuntimeException(e);
+                                        }
+
+                                        return CompletableFuture.completedFuture(Status.SUCCESS);
+                                    }
+                            ).join().expectSuccess();
+                        }
                 );
             }
 
