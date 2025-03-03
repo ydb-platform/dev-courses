@@ -106,8 +106,7 @@ public class Application {
                                                     DECLARE $name AS Text;
                                                     DECLARE $line_num AS Int64;
                                                                                             
-                                                    UPDATE write_file_progress SET line_num = $line_num
-                                                    WHERE name = $name;
+                                                    UPSERT write_file_progress(name, line_num) VALUES ($name, $line_num);
                                                     """,
                                             TxMode.SERIALIZABLE_RW,
                                             Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
