@@ -10,7 +10,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Status;
@@ -113,11 +112,11 @@ public class Application {
                                                         DECLARE $name AS Text;
                                                         DECLARE $line_num AS Int64;
                                                                                                 
-                                                        UPSERT write_file_progress(name, line_num) VALUES ($name, $line_num);
+                                                        UPSERT INTO write_file_progress(name, line_num) VALUES ($name, $line_num);
                                                         """,
                                                 Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
                                                         "$line_num", PrimitiveValue.newInt64(lineNumberCur))
-                                        ).execute();
+                                        ).execute().join().getStatus().expectSuccess();
 
                                         transaction.commit().join();
 
