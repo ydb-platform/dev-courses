@@ -42,7 +42,7 @@ public class Application {
                 var result1 = issueYdbRepository.linkTicketsNoInteractive(first.id(), second.id());
                 System.out.println("Result operation:");
                 for (var v : result1) {
-                    System.out.println("Id = " + v.a() + ", linkCounts = " + v.b());
+                    System.out.println("Id = " + v.id() + ", linkCounts = " + v.linkCount());
                 }
 
                 var third = allIssues.get(2);
@@ -50,7 +50,7 @@ public class Application {
                 var result2 = issueYdbRepository.linkTicketsInteractive(second.id(), third.id());
                 System.out.println("Result operation:");
                 for (var v : result2) {
-                    System.out.println("Id = " + v.a() + ", linkCounts = " + v.b());
+                    System.out.println("Id = " + v.id() + ", linkCounts = " + v.linkCount());
                 }
 
                 System.out.println("Print all tickets: ");
