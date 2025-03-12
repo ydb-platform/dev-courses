@@ -61,7 +61,7 @@ public class IssueYdbRepository {
                                     WHERE id IN ($t1, $t2);
                                     """,
                             Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
-                    ).execute().join();
+                    ).execute().join().getStatus().expectSuccess();
 
                     tx.createQuery("""
                                     DECLARE $t1 AS UUID;
@@ -71,7 +71,7 @@ public class IssueYdbRepository {
                                     VALUES ($t1, $t2), ($t2, $t1);
                                     """,
                             Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2))
-                    ).execute().join();
+                    ).execute().join().getStatus().expectSuccess();
 
                     var valueReader = QueryReader.readFrom(
                             tx.createQueryWithCommit("""
