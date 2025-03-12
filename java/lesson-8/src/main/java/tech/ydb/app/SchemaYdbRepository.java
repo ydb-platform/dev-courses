@@ -51,10 +51,12 @@ public class SchemaYdbRepository {
         ).join().getStatus().expectSuccess("Can't create an author column and index");
 
         retryCtx.supplyResult(
+                session -> session.createQuery("ALTER TABLE issues ADD COLUMN status Text;", TxMode.NONE).execute()
+        ).join().getStatus().expectSuccess("Can't create schema");
+
+        retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                ALTER TABLE issues ADD COLUMN status Text;
-                                                                
                                 ALTER TABLE issues ADD CHANGEFEED updates WITH (
                                     FORMAT = 'JSON',
                                     MODE = 'NEW_AND_OLD_IMAGES',
@@ -79,11 +81,11 @@ public class SchemaYdbRepository {
                 session -> session.createQuery(
                         """
                                 ALTER TABLE issues DROP CHANGEFEED updates;
-
+                                                                
                                 DROP TABLE issues;
                                 DROP TABLE links;
                                 """, TxMode.NONE
                 ).execute()
-        ).join().getStatus().expectSuccess("Can't drop table issues");
+        ).join().getStatus().expectSuccess("Can't drop tables");
     }
 }

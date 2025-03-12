@@ -12,17 +12,19 @@ import tech.ydb.topic.settings.TopicReadSettings;
 /**
  * @author Kirill Kurdyukov
  */
-public class ReaderWorker {
+public class ReaderChangefeedWorker {
     private final SyncReader reader;
     private final AtomicBoolean stoppedProcess = new AtomicBoolean();
 
     private volatile CompletableFuture<Void> readerJob;
 
-    public ReaderWorker(TopicClient topicClient) {
-        this.reader =  topicClient.createSyncReader(
+    public ReaderChangefeedWorker(TopicClient topicClient) {
+        this.reader = topicClient.createSyncReader(
                 ReaderSettings.newBuilder()
-                        .setConsumerName("email")
-                        .setTopics(List.of(TopicReadSettings.newBuilder().setPath("task_status").build()))
+                        .setConsumerName("test")
+                        .setTopics(
+                                List.of(TopicReadSettings.newBuilder().setPath("issues/updates").build())
+                        )
                         .build()
         );
 
