@@ -11,14 +11,10 @@ import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.ListType;
-import tech.ydb.table.values.ListValue;
 import tech.ydb.table.values.OptionalType;
-import tech.ydb.table.values.OptionalValue;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.StructType;
-import tech.ydb.table.values.StructValue;
-import tech.ydb.table.values.Value;
 
 /**
  * @author Kirill Kurdyukov
@@ -48,7 +44,7 @@ public class IssueYdbRepository {
         return fetchIssues(queryReader);
     }
 
-    public void saveAll(List<Pair<String, String>> issues) {
+    public void saveAll(List<TitleAuthor> titleAuthors) {
         var structType = StructType.of(
                 "id", PrimitiveType.Uuid,
                 "title", PrimitiveType.Text,
@@ -57,10 +53,10 @@ public class IssueYdbRepository {
         );
 
         var listIssues = Params.of("$args", ListType.of(structType).newValue(
-                issues.stream().map(issue -> structType.newValue(
+                titleAuthors.stream().map(issue -> structType.newValue(
                         "id", PrimitiveValue.newUuid(UUID.randomUUID()),
-                        "title", PrimitiveValue.newText(issue.a()),
-                        "author", PrimitiveValue.newText(issue.b()),
+                        "title", PrimitiveValue.newText(issue.title()),
+                        "author", PrimitiveValue.newText(issue.author()),
                         "created_at", OptionalType.of(PrimitiveType.Timestamp)
                                 .newValue(PrimitiveValue.newTimestamp(Instant.now()))
                 )).toList()
@@ -101,7 +97,7 @@ public class IssueYdbRepository {
         ).join().getStatus().expectSuccess();
     }
 
-    public List<Pair<UUID, Long>> linkTicketsNoInteractive(UUID idT1, UUID idT2) {
+    public List<IssueLinkCount> linkTicketsNoInteractive(UUID idT1, UUID idT2) {
         var valueReader = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(session.createQuery(
                         """
@@ -123,10 +119,10 @@ public class IssueYdbRepository {
                 ))
         ).join().getValue();
 
-        return getLinkTicketPairs(valueReader);
+        return getIssueLinkCount(valueReader);
     }
 
-    public List<Pair<UUID, Long>> linkTicketsInteractive(UUID idT1, UUID idT2) {
+    public List<IssueLinkCount> linkTicketsInteractive(UUID idT1, UUID idT2) {
         return retryCtx.supplyResult(
                 session -> {
                     var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
@@ -163,7 +159,7 @@ public class IssueYdbRepository {
                                     Params.of("$t1", PrimitiveValue.newUuid(idT1), "$t2", PrimitiveValue.newUuid(idT2)))
                     ).join().getValue();
 
-                    var linkTicketPairs = getLinkTicketPairs(valueReader);
+                    var linkTicketPairs = getIssueLinkCount(valueReader);
 
                     return CompletableFuture.completedFuture(Result.success(linkTicketPairs));
                 }
@@ -205,7 +201,7 @@ public class IssueYdbRepository {
         return fetchIssues(resultSet);
     }
 
-    public List<Pair<UUID, String>> findFutures() {
+    public List<IssueTitle> findFutures() {
         var queryReader = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(
                         session.createQuery("""
@@ -228,11 +224,11 @@ public class IssueYdbRepository {
                 )
         ).join().getValue();
 
-        var linkTicketPairs = new ArrayList<Pair<UUID, String>>();
+        var linkTicketPairs = new ArrayList<IssueTitle>();
         var resultSet = queryReader.getResultSet(0);
 
         while (resultSet.next()) {
-            linkTicketPairs.add(new Pair<>(resultSet.getColumn(0).getUuid(), resultSet.getColumn(1).getText()));
+            linkTicketPairs.add(new IssueTitle(resultSet.getColumn(0).getUuid(), resultSet.getColumn(1).getText()));
         }
 
         return linkTicketPairs;
@@ -342,12 +338,12 @@ public class IssueYdbRepository {
         );
     }
 
-    private static List<Pair<UUID, Long>> getLinkTicketPairs(QueryReader valueReader) {
-        var linkTicketPairs = new ArrayList<Pair<UUID, Long>>();
+    private static List<IssueLinkCount> getIssueLinkCount(QueryReader valueReader) {
+        var linkTicketPairs = new ArrayList<IssueLinkCount>();
         var resultSet = valueReader.getResultSet(0);
 
         while (resultSet.next()) {
-            linkTicketPairs.add(new Pair<>(resultSet.getColumn(0).getUuid(), resultSet.getColumn(1).getInt64()));
+            linkTicketPairs.add(new IssueLinkCount(resultSet.getColumn(0).getUuid(), resultSet.getColumn(1).getInt64()));
         }
         return linkTicketPairs;
     }

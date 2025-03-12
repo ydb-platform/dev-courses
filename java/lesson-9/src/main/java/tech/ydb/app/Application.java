@@ -22,9 +22,9 @@ public class Application {
 
             schemaYdbRepository.createSchema();
             issueYdbRepository.saveAll(List.of(
-                    new Pair<>("Ticket 1", "Author 1"),
-                    new Pair<>("Ticket 2", "Author 2"),
-                    new Pair<>("Ticket 3", "Author 3"))
+                    new TitleAuthor("Ticket 1", "Author 1"),
+                    new TitleAuthor("Ticket 2", "Author 2"),
+                    new TitleAuthor("Ticket 3", "Author 3"))
             );
 
             var allTickets = issueYdbRepository.findAll();
@@ -37,10 +37,10 @@ public class Application {
             for (var issue : issueYdbRepository.findByIds(List.of(allTickets.get(0).id(), allTickets.get(1).id()))) {
                 printIssue(issue);
             }
-            
+
             System.out.println("Future issues: ");
             for (var issue : issueYdbRepository.findFutures()) {
-                System.out.println("Id: " + issue.a() + ", Title: " + issue.b());
+                System.out.println("Id: " + issue.id() + ", Title: " + issue.title());
             }
 
             System.out.println("Deleted by ids [" + allTickets.get(0).id() + ", " + allTickets.get(1).id() + "]");

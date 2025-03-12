@@ -22,7 +22,7 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    public List<Pair<UUID, Long>> linkTicketsNoInteractive(UUID idT1, UUID idT2) {
+    public List<IssueLinkCount> linkTicketsNoInteractive(UUID idT1, UUID idT2) {
         var valueReader = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(session.createQuery(
                         """
@@ -47,7 +47,7 @@ public class IssueYdbRepository {
         return getLinkTicketPairs(valueReader);
     }
 
-    public List<Pair<UUID, Long>> linkTicketsInteractive(UUID idT1, UUID idT2) {
+    public List<IssueLinkCount> linkTicketsInteractive(UUID idT1, UUID idT2) {
         return retryCtx.supplyResult(
                 session -> {
                     var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
@@ -166,12 +166,14 @@ public class IssueYdbRepository {
         );
     }
 
-    private static ArrayList<Pair<UUID, Long>> getLinkTicketPairs(QueryReader valueReader) {
-        var linkTicketPairs = new ArrayList<Pair<UUID, Long>>();
+    private static List<IssueLinkCount> getLinkTicketPairs(QueryReader valueReader) {
+        var linkTicketPairs = new ArrayList<IssueLinkCount>();
         var resultSet = valueReader.getResultSet(0);
 
         while (resultSet.next()) {
-            linkTicketPairs.add(new Pair<>(resultSet.getColumn(0).getUuid(), resultSet.getColumn(1).getInt64()));
+            linkTicketPairs.add(
+                    new IssueLinkCount(resultSet.getColumn(0).getUuid(), resultSet.getColumn(1).getInt64())
+            );
         }
         return linkTicketPairs;
     }
