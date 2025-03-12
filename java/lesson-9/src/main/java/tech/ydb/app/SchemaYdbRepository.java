@@ -53,16 +53,22 @@ public class SchemaYdbRepository {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                CREATE TOPIC task_status(
-                                    CONSUMER email
-                                ) WITH(
-                                    auto_partitioning_strategy='scale_up',
-                                    min_active_partitions=2,
-                                    max_active_partitions=10,
-                                    retention_period = Interval('P3D')
-                                );
-                                                                    
                                 ALTER TABLE issues ADD COLUMN status Text;
+                                                                
+                                ALTER TABLE issues ADD CHANGEFEED updates WITH (
+                                    FORMAT = 'JSON',
+                                    MODE = 'NEW_AND_OLD_IMAGES',
+                                    VIRTUAL_TIMESTAMPS = TRUE,
+                                    INITIAL_SCAN = TRUE
+                                );
+                                """, TxMode.NONE
+                ).execute()
+        ).join().getStatus().expectSuccess("Can't create schema");
+
+        retryCtx.supplyResult(
+                session -> session.createQuery(
+                        """
+                                ALTER TOPIC `issues/updates` ADD CONSUMER test;
                                 """, TxMode.NONE
                 ).execute()
         ).join().getStatus().expectSuccess("Can't create schema");
@@ -72,9 +78,10 @@ public class SchemaYdbRepository {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
+                                ALTER TABLE issues DROP CHANGEFEED updates;
+
                                 DROP TABLE issues;
                                 DROP TABLE links;
-                                DROP TOPIC task_status;
                                 """, TxMode.NONE
                 ).execute()
         ).join().getStatus().expectSuccess("Can't drop table issues");
