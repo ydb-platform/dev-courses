@@ -5,11 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import tech.ydb.core.Result;
 import tech.ydb.table.SessionRetryContext;
-import tech.ydb.table.query.Params;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.ReadRowsSettings;
 import tech.ydb.table.settings.ReadTableSettings;
@@ -22,11 +19,11 @@ import tech.ydb.table.values.StructType;
 /**
  * @author Kirill Kurdyukov
  */
-public class NativeApiYdbRepository {
+public class KeyValueApiYdbRepository {
 
     private final SessionRetryContext retryTableCtx;
 
-    public NativeApiYdbRepository(SessionRetryContext retryTableCtx) {
+    public KeyValueApiYdbRepository(SessionRetryContext retryTableCtx) {
         this.retryTableCtx = retryTableCtx;
     }
 

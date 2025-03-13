@@ -29,7 +29,7 @@ public class Application {
 
             var schemaYdbRepository = new SchemaYdbRepository(retryCtx);
             var issueYdbRepository = new IssueYdbRepository(retryCtx);
-            var nativeApiYdbRepository = new NativeApiYdbRepository(retryTableCtx);
+            var nativeApiYdbRepository = new KeyValueApiYdbRepository(retryTableCtx);
 
             schemaYdbRepository.createSchema();
 
