@@ -6,8 +6,10 @@ package cmd
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/ydb-platform/ydb-go-sdk/v3"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -31,18 +33,55 @@ var longTransactionCmd = &cobra.Command{
 
 		i := 0
 		for {
+			i++
+			goroutineNum := i
 			go func() {
-				db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
+				attempt := 0
+				err := db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
+					attempt++
+
 					// тут я создаю транзакцию явно вместо использования DoTx
 					// чтобы иметь возможность явно получить ошибку и вывести её в лог
-					tx, err := s.Begin(ctx, query.TxSettings())
+					tx, err := s.Begin(ctx, query.TxSettings(query.WithDefaultTxMode()))
 					if err != nil {
 						return err
 					}
 
-					tx.QueryRow()
+					res, err := tx.QueryRow(ctx, "SELECT val FROM t WHERE id = 1")
+					if err != nil {
+						return err
+					}
+
+					var old int64
+					if err = res.Scan(&old); err != nil {
+						return err
+					}
+
+					time.Sleep(2 * time.Second)
+					newVal := old + 1
+					err = tx.Exec(ctx, `
+DECLARE $val AS Int64;
+
+UPSERT INTO t (id, val) VALUES (1, $val)
+`, query.WithParameters(
+						ydb.ParamsFromMap(map[string]any{"$val": newVal}),
+					), query.WithCommit())
+					var updateResult = "OK"
+					if err != nil {
+						// Сообщения об ошибках очень длинные и подробные - для диагностики
+						// поэтому интересующую в демонстрации ошибку я сокращу - для наглядности
+						if ydb.IsOperationErrorTransactionLocksInvalidated(err) {
+							updateResult = "TLI"
+						} else {
+							updateResult = err.Error()
+						}
+					}
+					log.Printf("goroutine: %v, val:%v, result: %v", goroutineNum, newVal, updateResult)
+					return err
 				})
+				log.Printf("retry completed for goroutine: %v, attempts: %v, result: %v", goroutineNum, attempt, err)
 			}()
+			time.Sleep(time.Second)
 		}
 	},
 }

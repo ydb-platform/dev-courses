@@ -39,7 +39,7 @@ var oftenCompilationCmd = &cobra.Command{
 
 		for {
 			time.Sleep(time.Second)
-			fmt.Println("Выполнено запросов:", чi)
+			fmt.Println("Выполнено запросов:", i)
 		}
 	},
 }

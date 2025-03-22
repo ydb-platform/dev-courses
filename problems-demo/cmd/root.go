@@ -63,5 +63,7 @@ func dbConnect() *ydb.Driver {
 		log.Fatalf("Ошибка при подключении к базе данных: %v", err)
 	}
 
+	log.Println("Подключение к YDB")
+
 	return db
 }
