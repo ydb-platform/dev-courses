@@ -22,12 +22,12 @@ var longTransactionCmd = &cobra.Command{
 		ctx := context.Background()
 		db := dbConnect()
 
-		_ = db.Query().Exec(ctx, "DROP TABLE IF EXISTS t")
-		if err := db.Query().Exec(ctx, "CREATE TABLE t (id Int64, val Int64, PRIMARY KEY(id));"); err != nil {
+		_ = db.Query().Exec(ctx, "DROP TABLE IF EXISTS longTransaction")
+		if err := db.Query().Exec(ctx, "CREATE TABLE longTransaction (id Int64, val Int64, PRIMARY KEY(id));"); err != nil {
 			log.Fatal("Ошибка при создании таблицы", err)
 		}
 
-		if err := db.Query().Exec(ctx, "INSERT INTO t (id, val) VALUES (1, 0)"); err != nil {
+		if err := db.Query().Exec(ctx, "INSERT INTO longTransaction (id, val) VALUES (1, 0)"); err != nil {
 			log.Fatal("Ошибка при добавлении начальной строки таблицы", err)
 		}
 
@@ -47,7 +47,7 @@ var longTransactionCmd = &cobra.Command{
 						return err
 					}
 
-					res, err := tx.QueryRow(ctx, "SELECT val FROM t WHERE id = 1")
+					res, err := tx.QueryRow(ctx, "SELECT val FROM longTransaction WHERE id = 1")
 					if err != nil {
 						return err
 					}
@@ -62,7 +62,7 @@ var longTransactionCmd = &cobra.Command{
 					err = tx.Exec(ctx, `
 DECLARE $val AS Int64;
 
-UPSERT INTO t (id, val) VALUES (1, $val)
+UPSERT INTO longTransaction (id, val) VALUES (1, $val)
 `, query.WithParameters(
 						ydb.ParamsFromMap(map[string]any{"$val": newVal}),
 					), query.WithCommit())
