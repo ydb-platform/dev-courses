@@ -6,12 +6,9 @@ package cmd
 import (
 	"context"
 	"log"
-	"math/rand/v2"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/ydb-platform/ydb-go-sdk/v3"
-	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
 // loadWithIntervalsCmd represents the loadWithIntervals command
@@ -27,34 +24,12 @@ var loadWithIntervalsCmd = &cobra.Command{
 		ctx := context.Background()
 		db := dbConnect()
 
-		if err := db.Query().Exec(ctx, `DROP TABLE IF EXISTS loadWithIntervals`); err != nil {
-			log.Fatalf("Ошибка при удалении таблицы: %v", err)
-		}
-
-		if err := db.Query().Exec(ctx, `
-CREATE TABLE loadWithIntervals (
-	id Int64 NOT NULL,
-	val Int64,
-	PRIMARY KEY (id)
-)
-`); err != nil {
-			log.Fatalf("Ошибка при создании таблицы: %v", err)
-		}
-
 		for {
 			log.Println("Нагружаю...")
 
 			start := time.Now()
 			for time.Since(start) < loadInterval {
-				db.Query().Exec(ctx, `
-DECLARE $id Int64;
-DECLARE $val Int64;
-
-UPSERT INTO loadWithIntervals VALUES ($id, $val);
-`, query.WithParameters(ydb.ParamsFromMap(map[string]any{
-					"id":  1,
-					"val": rand.Int64(),
-				})))
+				_ = db.Query().Exec(ctx, `SELECT 1`)
 			}
 
 			log.Println("Пауза")
