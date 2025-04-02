@@ -30,7 +30,7 @@ import tech.ydb.topic.write.Message;
  */
 public class Application {
 
-    private static final String PATH = "/java/lesson-6.2/file.txt";
+    private static final String PATH = "/dev-1/lesson-6.2/java/file.txt";
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) throws IOException, InterruptedException {
