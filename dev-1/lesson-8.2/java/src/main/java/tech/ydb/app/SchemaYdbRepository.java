@@ -19,10 +19,10 @@ public class SchemaYdbRepository {
                 session -> session.createQuery(
                         """
                                 CREATE TABLE issues (
-                                    id UUID NOT NULL,
-                                    title Text,
-                                    created_at Timestamp,
-                                    author Text,
+                                    id Int64 NOT NULL,
+                                    title Text NOT NULL,
+                                    created_at Timestamp NOT NULL,
+                                    author Text NOT NULL,
                                     PRIMARY KEY (id)
                                 );
                                 """, TxMode.NONE
@@ -34,8 +34,8 @@ public class SchemaYdbRepository {
                         """
                                 ALTER TABLE issues ADD COLUMN link_count Int64;
                                 CREATE TABLE links (
-                                    source UUID NOT NULL,
-                                    destination UUID NOT NULL,
+                                    source Int64 NOT NULL,
+                                    destination Int64 NOT NULL,
                                     PRIMARY KEY(source, destination)
                                 );
                                 """, TxMode.NONE

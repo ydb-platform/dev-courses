@@ -329,7 +329,7 @@ public class IssueYdbRepository {
         resultSetReader.next();
 
         return new Issue(
-                resultSetReader.getColumn(0).getUuid(),
+                resultSetReader.getColumn(0).getInt64(),
                 resultSetReader.getColumn(1).getText(),
                 resultSetReader.getColumn(2).getTimestamp(),
                 resultSetReader.getColumn(3).getText(),
@@ -355,7 +355,7 @@ public class IssueYdbRepository {
 
         while (resultSetReader.next()) {
             issues.add(new Issue(
-                    resultSetReader.getColumn(0).getUuid(),
+                    resultSetReader.getColumn(0).getInt64(),
                     resultSetReader.getColumn(1).getText(),
                     resultSetReader.getColumn(2).getTimestamp(),
                     resultSetReader.getColumn(3).getText(),
