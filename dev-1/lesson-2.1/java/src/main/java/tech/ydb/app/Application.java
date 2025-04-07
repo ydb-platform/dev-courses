@@ -10,12 +10,17 @@ import tech.ydb.table.result.ResultSetReader;
 /**
  * @author Kirill Kurdyukov
  */
-public class        Application {
+public class Application {
+    // Строка подключения к локальной базе данных YDB
+    // Формат: grpc://<хост>:<порт>/<путь к базе данных>
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
+        // Создаем транспортный уровень для подключения к YDB через gRPC
         try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
+            // Создаем клиент для выполнения SQL-запросов
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
+                // Создаем контекст для автоматических повторных попыток выполнения запросов
                 SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
                 System.out.println("Database is available! Result `SELECT 1;` command: " +
@@ -24,6 +29,9 @@ public class        Application {
         }
     }
 
+    /**
+     * Класс для работы с YDB, инкапсулирующий логику выполнения запросов
+     */
     public static class YdbRepository {
         private final SessionRetryContext retryCtx;
 
@@ -31,15 +39,23 @@ public class        Application {
             this.retryCtx = retryCtx;
         }
 
+        /**
+         * Выполняет простой SQL-запрос SELECT 1 для проверки работоспособности базы данных
+         * @return результат запроса (всегда 1)
+         */
         public int SelectOne() {
+            // Выполняем запрос с автоматическими повторными попытками при ошибках
             QueryReader resultSet = retryCtx.supplyResult(session ->
                     QueryReader.readFrom(session.createQuery("SELECT 1;", TxMode.NONE))
             ).join().getValue();
 
+            // Получаем первый набор результатов
             ResultSetReader resultSetReader = resultSet.getResultSet(0);
 
+            // Переходим к первой строке результата
             resultSetReader.next();
 
+            // Возвращаем значение из первой строки и первой колонки (нумерация с 0)
             return resultSetReader.getColumn(0).getInt32();
         }
     }

@@ -4,10 +4,13 @@ import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
 /**
+ * Репозиторий для управления схемой базы данных YDB
+ * Отвечает за создание и удаление таблиц
  * @author Kirill Kurdyukov
  */
 public class SchemaYdbRepository {
 
+    // Контекст для автоматических повторных попыток выполнения запросов
     private final SessionRetryContext retryCtx;
 
     public SchemaYdbRepository(SessionRetryContext retryCtx) {
@@ -15,6 +18,7 @@ public class SchemaYdbRepository {
     }
 
     public void createSchema() {
+        // Создаем основную таблицу issues
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
@@ -29,6 +33,7 @@ public class SchemaYdbRepository {
                 ).execute()
         ).join().getStatus().expectSuccess("Can't create table issues");
 
+        // Добавляем колонку link_count и создаем таблицу для связей между тикетами
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """

@@ -29,7 +29,15 @@ public class KeyValueApiYdbRepository {
         this.retryTableCtx = retryTableCtx;
     }
 
+    /**
+     * Массовое добавление или обновление тикетов в таблице.
+     */
     public void bulkUpsert(String tableName, List<TitleAuthor> titleAuthorList) {
+
+        // Описывает структуру с полями, которые будут добавляться в таблицу.
+        // Смысл операции тот же что для запроса UPSERT. Поля первичного ключа - обязательные, 
+        // остальные - опциональные. Если запись с таким первичным ключём уже существует, то
+        // переданные поля обновятся, а остальные - сохранят прежние значения.
         var structType = StructType.of(
                 "id", PrimitiveType.Int64,
                 "title", PrimitiveType.Text,
@@ -51,6 +59,10 @@ public class KeyValueApiYdbRepository {
                 .join().expectSuccess();
     }
 
+    /**
+     * Чтение всех данных из таблицы.
+     * Использует executeReadTable для получения всех записей.
+     */
     public List<Issue> readTable(String tableName) {
         return retryTableCtx.supplyResult(session -> {
                     var listResult = new ArrayList<Issue>();
@@ -70,6 +82,10 @@ public class KeyValueApiYdbRepository {
         ).join().getValue();
     }
 
+    /**
+     * Чтение данных из таблицы по ключу.
+     * Использует readRows для получения записей по конкретному id.
+     */
     public List<Issue> readRows(String tableName, long id) {
         var keyStruct = StructType.of("id", PrimitiveType.Int64);
 
@@ -90,6 +106,10 @@ public class KeyValueApiYdbRepository {
         ).join().getValue();
     }
 
+    /**
+     * Вспомогательный метод для преобразования результатов запроса в объекты Issue.
+     * Обрабатывает различные варианты структуры данных (с link_count и status или без них).
+     */
     private void fetchIssues(ArrayList<Issue> listResult, ResultSetReader resultSetReader) {
         while (resultSetReader.next()) {
             var id = resultSetReader.getColumn(0).getInt64();

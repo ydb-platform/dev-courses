@@ -28,6 +28,9 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
+    /**
+     * Эффективный поиск тикетов по списку идентификаторов
+     */
     public List<Issue> findByIds(List<Long> ids) {
         var structType = StructType.of("id", PrimitiveType.Int64);
 
@@ -46,7 +49,12 @@ public class IssueYdbRepository {
         return fetchIssues(queryReader);
     }
 
+    /**
+     * Пакетное добавление нескольких тикетов за один запрос
+     */
     public void saveAll(List<TitleAuthor> titleAuthors) {
+
+        // Тут описывается структура данных, которая будет служить виртуальной таблицей.
         var structType = StructType.of(
                 "id", PrimitiveType.Int64,
                 "title", PrimitiveType.Text,
@@ -202,6 +210,10 @@ public class IssueYdbRepository {
         return fetchIssues(resultSet);
     }
 
+    /**
+     * Поиск тикетов со статусом "future" с обновлением их статуса в неинтерактивной транзакции
+     * С реализацией логики на YQL
+     */
     public List<IssueTitle> findFutures() {
         var queryReader = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(
@@ -235,6 +247,10 @@ public class IssueYdbRepository {
         return linkTicketPairs;
     }
 
+    /**
+     * Пакетное удаление тикетов с обновлением счетчиков связанных тикетов в неинтерактивной транзакции
+     * Демонстрирует использование именованных выражений, лямбда-функций и сложных запросов
+     */
     public void deleteTasks(List<Long> ids) {
         var idsParam = ListType.of(PrimitiveType.Int64).newValue(
                 ids.stream().map(PrimitiveValue::newInt64).toList()

@@ -52,6 +52,7 @@ public class Application {
                 throw new RuntimeException(e);
             }
 
+            // Массовое добавление данных через Key-Value API
             nativeApiYdbRepository.bulkUpsert("/local/issues", titleAuthorList);
 
             Issue lastIssue = null;
@@ -62,11 +63,13 @@ public class Application {
                 lastIssue = issue;
             }
 
+            // Чтение всех данных через Key-Value API
             System.out.println("ReadTable: ");
             for (var issue : nativeApiYdbRepository.readTable("/local/issues")) {
                 printIssue(issue);
             }
 
+            // Чтение данных по ключу через Key-Value API
             System.out.println("ReadRows: ");
             assert lastIssue != null;
             for (var issue : nativeApiYdbRepository.readRows("/local/issues", lastIssue.id())) {

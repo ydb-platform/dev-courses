@@ -4,10 +4,10 @@ import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
 /**
+ * Репозиторий для управления схемой YDB, включая создание и удаление таблиц и changefeed
  * @author Kirill Kurdyukov
  */
 public class SchemaYdbRepository {
-
     private final SessionRetryContext retryCtx;
 
     public SchemaYdbRepository(SessionRetryContext retryCtx) {
@@ -32,8 +32,8 @@ public class SchemaYdbRepository {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                ALTER TABLE issues ADD INDEX authorIndex GLOBAL ON (author);
-                                """, TxMode.NONE
+                        ALTER TABLE issues ADD INDEX authorIndex GLOBAL ON (author);
+                        """, TxMode.NONE
                 ).execute()
         ).join().getStatus().expectSuccess("Can't create an author column and index");
 
@@ -54,6 +54,7 @@ public class SchemaYdbRepository {
                 session -> session.createQuery("ALTER TABLE issues ADD COLUMN status Text;", TxMode.NONE).execute()
         ).join().getStatus().expectSuccess("Can't create schema");
 
+        // Создаем changefeed для отслеживания изменений в таблице issues
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """

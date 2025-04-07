@@ -10,6 +10,7 @@ import tech.ydb.topic.settings.ReaderSettings;
 import tech.ydb.topic.settings.TopicReadSettings;
 
 /**
+ * Воркер для чтения сообщений из топика YDB
  * @author Kirill Kurdyukov
  */
 public class ReaderWorker {
@@ -19,6 +20,7 @@ public class ReaderWorker {
     private volatile CompletableFuture<Void> readerJob;
 
     public ReaderWorker(TopicClient topicClient) {
+        // Создаем синхронный reader для чтения сообщений из топика task_status
         this.reader =  topicClient.createSyncReader(
                 ReaderSettings.newBuilder()
                         .setConsumerName("email")
@@ -30,18 +32,24 @@ public class ReaderWorker {
     }
 
     public void run() {
+        // Запускаем фоновое чтение сообщений из топика
         readerJob = CompletableFuture.runAsync(
                 () -> {
                     System.out.println("Started read worker!");
 
                     while (!stoppedProcess.get()) {
                         try {
+                            // Читаем сообщение с таймаутом в 1 секунду.
+                            // Если за 1 секунду сообщение не будет получено, метод вернет null
+                            // и цикл продолжит работу, ожидая следующее сообщение.
+                            // Таймаут чтобы остановить чтение топика по сигналу в stoppedProcess.
                             var message = reader.receive(1, TimeUnit.SECONDS);
 
                             if (message == null) {
                                 continue;
                             }
 
+                            // Выводим полученное сообщение
                             System.out.println("Received message: " + new String(message.getData()));
                         } catch (Exception e) {
                             // Ignored
@@ -54,8 +62,8 @@ public class ReaderWorker {
     }
 
     public void shutdown() {
+        // Устанавливаем флаг остановки и ждем завершения чтения событий
         stoppedProcess.set(true);
-
         readerJob.join();
     }
 }

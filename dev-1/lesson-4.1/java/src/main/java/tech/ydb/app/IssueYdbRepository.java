@@ -15,29 +15,40 @@ import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
 /**
+ * Репозиторий для работы с тикетами в базе данных YDB
+ * Реализует операции добавления, чтения и связывания тикетов
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
+    // Контекст для автоматических повторных попыток выполнения запросов
     private final SessionRetryContext retryCtx;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
         this.retryCtx = retryCtx;
     }
 
+    /**
+     * Связывает два тикета в рамках неинтерактивной транзакции
+     * Все операции (обновление счетчиков, добавление связей, чтение результатов) 
+     * выполняются за один запрос к YDB.
+     */
     public List<IssueLinkCount> linkTicketsNoInteractive(long idT1, long idT2) {
         var valueReader = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(session.createQuery(
                         """
                                 DECLARE $t1 AS Int64;
                                 DECLARE $t2 AS Int64;
-                                                                    
+                                                         
+                                -- Обновляем счетчики связей
                                 UPDATE issues
                                 SET link_count = COALESCE(link_count, 0) + 1
                                 WHERE id IN ($t1, $t2);
-                                                                    
+                                                            
+                                -- Добавляем записи о связях между тикетами
                                 INSERT INTO links (source, destination)
                                 VALUES ($t1, $t2), ($t2, $t1);
 
+                                -- Читаем обновленные данные
                                 SELECT id, link_count FROM issues
                                 WHERE id IN ($t1, $t2)
                                 """,
@@ -49,11 +60,23 @@ public class IssueYdbRepository {
         return getLinkTicketPairs(valueReader);
     }
 
+    /**
+     * Связывает два тикета в рамках интерактивной транзакции
+     * Операции выполняются последовательными запросами к YDB:
+     * 1. Обновление счетчиков связей
+     * 2. Добавление записей о связях
+     * 3. Чтение обновленных данных
+     * 
+     * Между запросами к YDB может быть выполнена логика на стороне приложения, 
+     * для определения стоит ли продолжать транзакцию и какой запрос выполнить следующим.
+     */
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
         return retryCtx.supplyResult(
                 session -> {
+                    // Транзакция будет изменять данные, поэтому используем режим SERIALIZABLE_RW
                     var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
+                    // Обновляем счетчики связей
                     tx.createQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
@@ -65,6 +88,7 @@ public class IssueYdbRepository {
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
                     ).execute().join().getStatus().expectSuccess();
 
+                    // Добавляем записи о связях между тикетами
                     tx.createQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
@@ -75,6 +99,7 @@ public class IssueYdbRepository {
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
                     ).execute().join().getStatus().expectSuccess();
 
+                    // Читаем обновленные данные и фиксируем транзакцию
                     var valueReader = QueryReader.readFrom(
                             tx.createQueryWithCommit("""
                                             DECLARE $t1 AS Int64;
@@ -93,6 +118,11 @@ public class IssueYdbRepository {
         ).join().getValue();
     }
 
+    /**
+     * Добавляет новый тикет в базу данных
+     * @param title название тикета
+     * @param author автор тикета
+     */
     public void addIssue(String title, String author) {
         var id = ThreadLocalRandom.current().nextLong();
         var now = Instant.now();
@@ -118,6 +148,10 @@ public class IssueYdbRepository {
         ).join().getStatus().expectSuccess("Failed upsert title");
     }
 
+    /**
+     * Получает все тикеты из базы данных
+     * @return список всех тикетов
+     */
     public List<Issue> findAll() {
         var titles = new ArrayList<Issue>();
         var resultSet = retryCtx.supplyResult(
@@ -141,6 +175,9 @@ public class IssueYdbRepository {
         return titles;
     }
 
+    /**
+     * Преобразует результаты запроса в список объектов IssueLinkCount
+     */
     private static List<IssueLinkCount> getLinkTicketPairs(QueryReader valueReader) {
         var linkTicketPairs = new ArrayList<IssueLinkCount>();
         var resultSet = valueReader.getResultSet(0);

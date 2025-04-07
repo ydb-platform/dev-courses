@@ -15,6 +15,7 @@ import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
 /**
+ * Репозиторий для работы с тикетами в базе данных YDB
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
@@ -24,6 +25,11 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
+    /**
+     * Связывает два тикета в рамках неинтерактивной транзакции
+     * Все операции (обновление счетчиков, добавление связей, чтение результатов) 
+     * выполняются в одной транзакции
+     */
     public List<IssueLinkCount> linkTicketsNoInteractive(long idT1, long idT2) {
         var valueReader = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(session.createQuery(
@@ -49,6 +55,9 @@ public class IssueYdbRepository {
         return getLinkTicketPairs(valueReader);
     }
 
+    /**
+     * Связывает два тикета в рамках интерактивной транзакции
+     */
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
         return retryCtx.supplyResult(
                 session -> {
@@ -93,6 +102,11 @@ public class IssueYdbRepository {
         ).join().getValue();
     }
 
+    /**
+     * Добавляет новый тикет в базу данных
+     * @param title название тикета
+     * @param author автор тикета
+     */
     public void addIssue(String title, String author) {
         var id = ThreadLocalRandom.current().nextLong();
         var now = Instant.now();
@@ -118,6 +132,10 @@ public class IssueYdbRepository {
         ).join().getStatus().expectSuccess("Failed upsert title");
     }
 
+    /**
+     * Получает все тикеты из базы данных
+     * @return список всех тикетов
+     */
     public List<Issue> findAll() {
         var titles = new ArrayList<Issue>();
         var resultSet = retryCtx.supplyResult(
@@ -141,13 +159,20 @@ public class IssueYdbRepository {
         return titles;
     }
 
+    /**
+     * Находит тикет по автору, используя вторичный индекс authorIndex
+     * @param author имя автора для поиска
+     * @return найденный тикет
+     */
     public Issue findByAuthor(String author) {
         var resultSet = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(
                         session.createQuery(
                                 """
                                         DECLARE $author AS Text;
-                                        SELECT id, title, created_at, author, COALESCE(link_count, 0) FROM issues VIEW authorIndex
+                                        SELECT 
+                                                id, title, created_at, author, COALESCE(link_count, 0) 
+                                        FROM issues VIEW authorIndex -- секция VIEW указывает на вторичный индекс
                                         WHERE author = $author;
                                         """,
                                 TxMode.SNAPSHOT_RO,
@@ -168,6 +193,9 @@ public class IssueYdbRepository {
         );
     }
 
+    /**
+     * Преобразует результаты запроса в список объектов
+     */
     private static List<IssueLinkCount> getLinkTicketPairs(QueryReader valueReader) {
         var linkTicketPairs = new ArrayList<IssueLinkCount>();
         var resultSet = valueReader.getResultSet(0);

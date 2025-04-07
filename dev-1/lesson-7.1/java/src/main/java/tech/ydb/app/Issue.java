@@ -1,10 +1,40 @@
 package tech.ydb.app;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
+ * Запись, представляющая тикет в системе.
+ * Все изменения полей этой записи будут отслеживаться через changefeed.
  * @author Kirill Kurdyukov
  */
-public record Issue(long id, String title, Instant now, String author, long linkCounts, String status) {
-}
+public record Issue(
+    /**
+     * Уникальный идентификатор тикета
+     */
+    long id,
+    
+    /**
+     * Заголовок тикета
+     */
+    String title,
+    
+    /**
+     * Время создания тикета
+     */
+    Instant now,
+    
+    /**
+     * Автор тикета
+     */
+    String author,
+    
+    /**
+     * Количество связанных тикетов
+     */
+    long linkCounts,
+    
+    /**
+     * Текущий статус тикета (NEW, IN_PROGRESS, DONE)
+     */
+    String status
+) {}

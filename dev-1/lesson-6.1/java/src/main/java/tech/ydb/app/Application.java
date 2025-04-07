@@ -6,6 +6,7 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.topic.TopicClient;
 
 /**
+ * Пример работы с топиками в YDB
  * @author Kirill Kurdyukov
  */
 public class Application {
@@ -35,6 +36,7 @@ public class Application {
                 printIssue(issue);
             }
 
+            // Создаем сервис для обновления статусов тикетов через топики
             var updateService = new StatusUpdateService(topicClient, issueYdbRepository);
 
             System.out.println("Update status all tickets: NULL -> OPEN ");
@@ -42,6 +44,9 @@ public class Application {
                 updateService.update(issue.id(), "OPEN");
             }
 
+            // Запускаем воркер для чтения сообщений из топика в отдельном потоке
+            // он будет получать события об обновлении тикетов и эмулировать отправку 
+            // уведомлений
             var readerWorker = new ReaderWorker(topicClient);
             readerWorker.run();
 
@@ -50,8 +55,10 @@ public class Application {
                 updateService.update(issue.id(), "IN_PROGRESS");
             }
 
+            // Ждем обработки всех сообщений
             Thread.sleep(5_000);
 
+            // Корректно завершаем работу сервисов
             updateService.shutdown();
             readerWorker.shutdown();
 
