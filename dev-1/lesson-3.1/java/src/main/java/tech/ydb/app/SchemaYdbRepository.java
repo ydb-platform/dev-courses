@@ -19,9 +19,9 @@ public class SchemaYdbRepository {
                 session -> session.createQuery(
                         """
                                 CREATE TABLE issues (
-                                    id UUID NOT NULL,
-                                    title Text,
-                                    created_at Timestamp,
+                                    id Int64 NOT NULL,
+                                    title Text NOT NULL,
+                                    created_at Timestamp NOT NULL,
                                     PRIMARY KEY (id)
                                 );
                                 """, TxMode.NONE

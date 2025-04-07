@@ -17,7 +17,7 @@ import tech.ydb.table.TableClient;
  */
 public class Application {
 
-    private static final String PATH = "/java/lesson-8.2/title_author.csv";
+    private static final String PATH = "/dev-1/lesson-8.2/java/title_author.csv";
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
@@ -31,6 +31,7 @@ public class Application {
             var issueYdbRepository = new IssueYdbRepository(retryCtx);
             var nativeApiYdbRepository = new KeyValueApiYdbRepository(retryTableCtx);
 
+            schemaYdbRepository.dropSchema();
             schemaYdbRepository.createSchema();
 
             var titleAuthorList = new ArrayList<TitleAuthor>();
@@ -71,8 +72,6 @@ public class Application {
             for (var issue : nativeApiYdbRepository.readRows("/local/issues", lastIssue.id())) {
                 printIssue(issue);
             }
-
-            schemaYdbRepository.dropSchema();
         }
     }
 

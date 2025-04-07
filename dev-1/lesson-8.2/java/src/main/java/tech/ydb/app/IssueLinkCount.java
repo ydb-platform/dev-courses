@@ -5,5 +5,5 @@ import java.util.UUID;
 /**
  * @author Kirill Kurdyukov
  */
-public record IssueLinkCount(UUID id, long linkCount) {
+public record IssueLinkCount(long id, long linkCount) {
 }

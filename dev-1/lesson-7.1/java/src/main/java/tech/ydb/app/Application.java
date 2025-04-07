@@ -22,13 +22,14 @@ public class Application {
             var schemaYdbRepository = new SchemaYdbRepository(retryCtx);
             var issueYdbRepository = new IssueYdbRepository(retryCtx);
 
+            schemaYdbRepository.dropSchema();
             schemaYdbRepository.createSchema();
 
             var first = issueYdbRepository.addIssue("Ticket 1", "Author 1");
             var second = issueYdbRepository.addIssue("Ticket 2", "Author 2");
             issueYdbRepository.updateStatus(first.id(), "future");
             issueYdbRepository.delete(second.id());
-            issueYdbRepository.delete(UUID.randomUUID());
+            issueYdbRepository.delete(second.id());
 
             var readerWorker = new ReaderChangefeedWorker(topicClient);
             readerWorker.run();
@@ -40,8 +41,6 @@ public class Application {
             for (var ticket : issueYdbRepository.findAll()) {
                 printIssue(ticket);
             }
-
-            schemaYdbRepository.dropSchema();
         }
     }
 

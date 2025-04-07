@@ -3,8 +3,10 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
+
 import tech.ydb.core.Result;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.result.ResultSetReader;
@@ -29,7 +31,7 @@ public class KeyValueApiYdbRepository {
 
     public void bulkUpsert(String tableName, List<TitleAuthor> titleAuthorList) {
         var structType = StructType.of(
-                "id", PrimitiveType.Uuid,
+                "id", PrimitiveType.Int64,
                 "title", PrimitiveType.Text,
                 "author", PrimitiveType.Text,
                 "created_at", OptionalType.of(PrimitiveType.Timestamp)
@@ -37,7 +39,7 @@ public class KeyValueApiYdbRepository {
 
         var listIssues = ListType.of(structType).newValue(
                 titleAuthorList.stream().map(issue -> structType.newValue(
-                        "id", PrimitiveValue.newUuid(UUID.randomUUID()),
+                        "id", PrimitiveValue.newInt64(ThreadLocalRandom.current().nextLong()),
                         "title", PrimitiveValue.newText(issue.title()),
                         "author", PrimitiveValue.newText(issue.author()),
                         "created_at", OptionalType.of(PrimitiveType.Timestamp)
@@ -68,15 +70,16 @@ public class KeyValueApiYdbRepository {
         ).join().getValue();
     }
 
-    public List<Issue> readRows(String tableName, UUID id) {
-        var keyStruct = StructType.of("id", PrimitiveType.Uuid);
+    public List<Issue> readRows(String tableName, long id) {
+        var keyStruct = StructType.of("id", PrimitiveType.Int64);
 
         return retryTableCtx.supplyResult(session -> {
                     var listResult = new ArrayList<Issue>();
 
                     var resultSetReader = session.readRows(tableName,
                             ReadRowsSettings.newBuilder()
-                                    .addKey(keyStruct.newValue("id", PrimitiveValue.newUuid(id)))
+                                    .addKey(keyStruct.newValue("id", PrimitiveValue.newInt64(id)))
+                                    .addColumns("id", "title", "created_at", "author")
                                     .build()
                     ).join().getValue().getResultSetReader();
 
@@ -89,10 +92,24 @@ public class KeyValueApiYdbRepository {
 
     private void fetchIssues(ArrayList<Issue> listResult, ResultSetReader resultSetReader) {
         while (resultSetReader.next()) {
-            var id = resultSetReader.getColumn(0).getUuid();
+            var id = resultSetReader.getColumn(0).getInt64();
 
-            if (!id.toString().contains("0")) {
+            if (!Long.toString(id).contains("0")) {
                 continue;
+            };
+
+            long linksCount;
+            if (resultSetReader.getColumnCount() > 4) {
+                linksCount = resultSetReader.getColumn(4).getInt64();
+            } else {
+                linksCount = 0;
+            }
+
+            String status;
+            if (resultSetReader.getColumnCount() > 5) {
+                status = resultSetReader.getColumn(5).getText();
+            } else {
+                status = "";
             }
 
             listResult.add(
@@ -101,8 +118,8 @@ public class KeyValueApiYdbRepository {
                             resultSetReader.getColumn(1).getText(),
                             resultSetReader.getColumn(2).getTimestamp(),
                             resultSetReader.getColumn(3).getText(),
-                            resultSetReader.getColumn(4).getInt64(),
-                            resultSetReader.getColumn(5).getText()
+                            linksCount,
+                            status
                     )
             );
         }

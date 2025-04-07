@@ -5,5 +5,5 @@ import java.util.UUID;
 /**
  * @author Kirill Kurdyukov
  */
-public record IssueTitle(UUID id, String title) {
+public record IssueTitle(long id, String title) {
 }

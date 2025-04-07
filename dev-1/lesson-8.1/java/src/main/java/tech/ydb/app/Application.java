@@ -20,6 +20,7 @@ public class Application {
             var schemaYdbRepository = new SchemaYdbRepository(retryCtx);
             var issueYdbRepository = new IssueYdbRepository(retryCtx);
 
+            schemaYdbRepository.dropSchema();
             schemaYdbRepository.createSchema();
             issueYdbRepository.saveAll(List.of(
                     new TitleAuthor("Ticket 1", "Author 1"),
@@ -50,8 +51,6 @@ public class Application {
             for (var ticket : issueYdbRepository.findAll()) {
                 printIssue(ticket);
             }
-
-            schemaYdbRepository.dropSchema();
         }
     }
 

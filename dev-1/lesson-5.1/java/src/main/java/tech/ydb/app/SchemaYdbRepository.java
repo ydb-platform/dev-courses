@@ -19,9 +19,9 @@ public class SchemaYdbRepository {
                 session -> session.createQuery(
                         """
                                 CREATE TABLE issues (
-                                    id UUID NOT NULL,
-                                    title Text,
-                                    created_at Timestamp,
+                                    id Int64 NOT NULL,
+                                    title Text NOT NULL,
+                                    created_at Timestamp NOT NULL,
                                     author Text,
                                     PRIMARY KEY (id)
                                 );
@@ -42,8 +42,8 @@ public class SchemaYdbRepository {
                         """
                                 ALTER TABLE issues ADD COLUMN link_count Int64;
                                 CREATE TABLE links (
-                                    source UUID NOT NULL,
-                                    destination UUID NOT NULL,
+                                    source Int64 NOT NULL,
+                                    destination Int64 NOT NULL,
                                     PRIMARY KEY(source, destination)
                                 );
                                 """, TxMode.NONE
@@ -55,8 +55,8 @@ public class SchemaYdbRepository {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                DROP TABLE issues;
-                                DROP TABLE links;
+                                DROP TABLE IF EXISTS issues;
+                                DROP TABLE IF EXISTS links;
                                 """, TxMode.NONE
                 ).execute()
         ).join().getStatus().expectSuccess("Can't drop table issues");

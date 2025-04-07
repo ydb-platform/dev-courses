@@ -28,7 +28,7 @@ public class StatusUpdateService {
         this.writer.init();
     }
 
-    public void update(UUID uuid, String status) {
+    public void update(long uuid, String status) {
         issueYdbRepository.updateStatus(uuid, status);
 
         writer.send(Message.newBuilder()

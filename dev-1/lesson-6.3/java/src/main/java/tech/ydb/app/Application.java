@@ -34,7 +34,7 @@ import tech.ydb.topic.write.Message;
  */
 public class Application {
 
-    private static final String PATH = "/java/lesson-6.3/file.txt";
+    private static final String PATH = "/dev-1/lesson-6.3/java/file.txt";
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -44,6 +44,7 @@ public class Application {
 
             var retryCtx = SessionRetryContext.create(queryClient).build();
 
+            dropSchema(retryCtx);
             createSchema(retryCtx);
 
             var reader = topicClient.createSyncReader(
@@ -83,12 +84,12 @@ public class Application {
                 var origLineNumber = new AtomicLong(1);
 
                 lines.forEach(line -> {
-                            if (origLineNumber.getAndIncrement() < lineNumber.get()) {
+                    if (origLineNumber.getAndIncrement() < lineNumber.get()) {
                                 return;
                             }
 
-                            var lineNumberCur = lineNumber.getAndIncrement();
-                            retryCtx.supplyStatus(
+                    var lineNumberCur = lineNumber.getAndIncrement();
+                    retryCtx.supplyStatus(
                                     session -> {
                                         var transaction = session.beginTransaction(TxMode.SERIALIZABLE_RW).join().getValue();
                                         var writer = topicClient.createSyncWriter(
@@ -138,8 +139,6 @@ public class Application {
             readerJob.join();
 
             printTableFile(retryCtx);
-
-            dropSchema(retryCtx);
         }
     }
 
@@ -242,9 +241,9 @@ public class Application {
 
     private static void dropSchema(SessionRetryContext retryCtx) {
         executeSchema(retryCtx, """
-                DROP TABLE file;
-                DROP TABLE write_file_progress;
-                DROP TOPIC file_topic;
+                DROP TABLE IF EXISTS file;
+                DROP TABLE IF EXISTS write_file_progress;
+                DROP TOPIC IF EXISTS file_topic;
                 """);
     }
 
