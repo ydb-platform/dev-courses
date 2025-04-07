@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
@@ -21,13 +23,13 @@ public class IssueYdbRepository {
     }
 
     public Issue addIssue(String title) {
-        var id = UUID.randomUUID();
+        var id = ThreadLocalRandom.current().nextLong();
         var now = Instant.now();
 
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                DECLARE $id AS UUID;
+                                DECLARE $id AS Int64;
                                 DECLARE $title AS Text;
                                 DECLARE $created_at AS Timestamp;
                                 UPSERT INTO issues (id, title, created_at)
@@ -35,7 +37,7 @@ public class IssueYdbRepository {
                                 """,
                         TxMode.SERIALIZABLE_RW,
                         Params.of(
-                                "$id", PrimitiveValue.newUuid(id),
+                                "$id", PrimitiveValue.newInt64(id),
                                 "$title", PrimitiveValue.newText(title),
                                 "$created_at", PrimitiveValue.newTimestamp(now)
                         )
@@ -57,7 +59,7 @@ public class IssueYdbRepository {
 
         while (resultSetReader.next()) {
             titles.add(new Issue(
-                    resultSetReader.getColumn(0).getUuid(),
+                    resultSetReader.getColumn(0).getInt64(),
                     resultSetReader.getColumn(1).getText(),
                     resultSetReader.getColumn(2).getTimestamp()
             ));

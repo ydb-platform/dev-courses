@@ -29,7 +29,7 @@ public class Application {
             var second = issueYdbRepository.addIssue("Ticket 2", "Author 2");
             issueYdbRepository.updateStatus(first.id(), "future");
             issueYdbRepository.delete(second.id());
-            issueYdbRepository.delete(UUID.randomUUID());
+            issueYdbRepository.delete(second.id());
 
             var readerWorker = new ReaderChangefeedWorker(topicClient);
             readerWorker.run();

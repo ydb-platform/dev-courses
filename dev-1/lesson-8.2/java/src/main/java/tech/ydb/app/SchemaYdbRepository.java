@@ -22,7 +22,7 @@ public class SchemaYdbRepository {
                                     id Int64 NOT NULL,
                                     title Text NOT NULL,
                                     created_at Timestamp NOT NULL,
-                                    author Text NOT NULL,
+                                    author Text,
                                     PRIMARY KEY (id)
                                 );
                                 """, TxMode.NONE
