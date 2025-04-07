@@ -80,10 +80,8 @@ public class SchemaYdbRepository {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                ALTER TABLE issues DROP CHANGEFEED updates;
-
-                                DROP TABLE issues;
-                                DROP TABLE links;
+                                DROP TABLE IF EXISTS issues;
+                                DROP TABLE IF EXISTS links;
                                 """, TxMode.NONE
                 ).execute()
         ).join().getStatus().expectSuccess("Can't drop table issues");

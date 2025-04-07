@@ -19,6 +19,7 @@ public class Application {
                 var schemaYdbRepository = new SchemaYdbRepository(retryCtx);
                 var issueYdbRepository = new IssueYdbRepository(retryCtx);
 
+                schemaYdbRepository.dropSchema();
                 schemaYdbRepository.createSchema();
 
                 issueYdbRepository.addIssue("Ticket 1", "Author 1");
@@ -34,8 +35,6 @@ public class Application {
 
                 System.out.println("Find by index `authorIndex`: ");
                 printIssue(issueYdbRepository.findByAuthor("Author 2"));
-
-                schemaYdbRepository.dropSchema();
             }
         }
     }

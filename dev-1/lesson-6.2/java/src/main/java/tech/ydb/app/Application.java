@@ -40,6 +40,7 @@ public class Application {
 
             var retryCtx = SessionRetryContext.create(queryClient).build();
 
+            dropSchema(retryCtx);
             createSchema(retryCtx);
 
             var writer = topicClient.createSyncWriter(
@@ -121,8 +122,6 @@ public class Application {
             printTableFile(retryCtx);
 
             readerJob.join();
-
-            dropSchema(retryCtx);
         }
     }
 
@@ -254,10 +253,10 @@ public class Application {
 
     private static void dropSchema(SessionRetryContext retryCtx) {
         executeSchema(retryCtx, """
-                DROP TABLE file;
-                DROP TABLE file_progress;
-                DROP TABLE write_file_progress;
-                DROP TOPIC file_topic;
+                DROP TABLE IF EXISTS file;
+                DROP TABLE IF EXISTS file_progress;
+                DROP TABLE IF EXISTS write_file_progress;
+                DROP TOPIC IF EXISTS file_topic;
                 """);
     }
 

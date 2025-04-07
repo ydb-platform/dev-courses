@@ -31,6 +31,7 @@ public class Application {
             var issueYdbRepository = new IssueYdbRepository(retryCtx);
             var nativeApiYdbRepository = new KeyValueApiYdbRepository(retryTableCtx);
 
+            schemaYdbRepository.dropSchema();
             schemaYdbRepository.createSchema();
 
             var titleAuthorList = new ArrayList<TitleAuthor>();
@@ -71,8 +72,6 @@ public class Application {
             for (var issue : nativeApiYdbRepository.readRows("/local/issues", lastIssue.id())) {
                 printIssue(issue);
             }
-
-            schemaYdbRepository.dropSchema();
         }
     }
 
