@@ -20,8 +20,8 @@ public class SchemaYdbRepository {
                         """
                                 CREATE TABLE issues (
                                     id UUID NOT NULL,
-                                    title Text,
-                                    created_at Timestamp,
+                                    title Text NOT NULL,
+                                    created_at Timestamp NOT NULL,
                                     author Text,
                                     PRIMARY KEY (id)
                                 );

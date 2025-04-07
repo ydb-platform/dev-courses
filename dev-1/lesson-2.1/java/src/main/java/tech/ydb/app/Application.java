@@ -10,7 +10,7 @@ import tech.ydb.table.result.ResultSetReader;
 /**
  * @author Kirill Kurdyukov
  */
-public class Application {
+public class        Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
