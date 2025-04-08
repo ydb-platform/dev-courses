@@ -4,11 +4,13 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
+ * Пример работы с транзакциями в YDB, урок - 4.1 Распределенные транзакции
  * @author Kirill Kurdyukov
  */
 public class Application {
 
+    // Строка подключения к локальной базе данных YDB
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
@@ -22,6 +24,7 @@ public class Application {
                 schemaYdbRepository.dropSchema();
                 schemaYdbRepository.createSchema();
 
+                // Создаем тикеты с авторами
                 issueYdbRepository.addIssue("Ticket 1", "Author 1");
                 issueYdbRepository.addIssue("Ticket 2", "Author 2");
                 issueYdbRepository.addIssue("Ticket 3", "Author 3");
@@ -36,6 +39,7 @@ public class Application {
                 var first = allIssues.get(0);
                 var second = allIssues.get(1);
 
+                // Демонстрация неинтерактивной транзакции - все запросы выполняются за один запрос к YDB
                 System.out.println("Linked tickets by non-interactive transactions id1 = " + first.id() + ", id2 = " + second.id());
                 var result1 = issueYdbRepository.linkTicketsNoInteractive(first.id(), second.id());
                 System.out.println("Result operation:");
@@ -44,6 +48,7 @@ public class Application {
                 }
 
                 var third = allIssues.get(2);
+                // Демонстрация интерактивной транзакции - между запросами к YDB есть логика на стороне приложения
                 System.out.println("Linked tickets by interactive transactions id2 = " + second.id() + ", id3 = " + third.id());
                 var result2 = issueYdbRepository.linkTicketsInteractive(second.id(), third.id());
                 System.out.println("Result operation:");

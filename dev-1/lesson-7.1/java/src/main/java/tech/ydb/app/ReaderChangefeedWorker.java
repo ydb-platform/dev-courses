@@ -9,7 +9,7 @@ import tech.ydb.topic.read.SyncReader;
 import tech.ydb.topic.settings.ReaderSettings;
 import tech.ydb.topic.settings.TopicReadSettings;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class ReaderChangefeedWorker {
@@ -19,6 +19,8 @@ public class ReaderChangefeedWorker {
     private volatile CompletableFuture<Void> readerJob;
 
     public ReaderChangefeedWorker(TopicClient topicClient) {
+        // Создаем reader для чтения изменений из топика changefeed
+        // С точки зрения читателя это обычный топик.
         this.reader = topicClient.createSyncReader(
                 ReaderSettings.newBuilder()
                         .setConsumerName("test")
@@ -57,7 +59,6 @@ public class ReaderChangefeedWorker {
 
     public void shutdown() {
         stoppedProcess.set(true);
-
         readerJob.join();
     }
 }

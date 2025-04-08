@@ -12,20 +12,36 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
-/**
+/*
+ * Репозиторий для работы с тикетами в базе данных YDB
+ * Реализует операции добавления и чтения тикетов
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
+    // Контекст для автоматических повторных попыток выполнения запросов
+    // Принимается извне через конструктор для:
+    // 1. Следования принципу Dependency Injection - зависимости класса передаются ему извне
+    // 2. Улучшения тестируемости - можно передать mock-объект для тестов
+    // 3. Централизованного управления конфигурацией ретраев
+    // 4. Возможности переиспользования одного контекста для разных репозиториев
     private final SessionRetryContext retryCtx;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
         this.retryCtx = retryCtx;
     }
 
+    /*
+     * Добавляет новый тикет в базу данных
+     * @param title название тикета
+     * @return созданный тикет с сгенерированным ID и временем создания
+     */
     public Issue addIssue(String title) {
+        // Генерируем случайный ID для тикета
         var id = ThreadLocalRandom.current().nextLong();
         var now = Instant.now();
 
+        // Выполняем UPSERT запрос для добавления тикета
+        // Изменять данные можно только в режиме транзакции SERIALIZABLE_RW, поэтому используем его
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
@@ -47,8 +63,16 @@ public class IssueYdbRepository {
         return new Issue(id, title, now);
     }
 
+    /*
+     * Получает все тикеты из базы данных
+     * @return список всех тикетов
+     */
     public List<Issue> findAll() {
         var titles = new ArrayList<Issue>();
+        // Выполняем SELECT запрос в режиме SNAPSHOT_RO для чтения данных
+        // Этот режим сообщает серверу, что это транзакция только для чтения.
+        // Это позволяет снизить накладные расходы на подготовку к изменениям и просто читать данные из 
+        // одного снимка базы данных.
         var resultSet = retryCtx.supplyResult(
                 session -> QueryReader.readFrom(
                         session.createQuery("SELECT id, title, created_at FROM issues;", TxMode.SNAPSHOT_RO)
@@ -57,6 +81,7 @@ public class IssueYdbRepository {
 
         var resultSetReader = resultSet.getResultSet(0);
 
+        // Читаем все строки результата
         while (resultSetReader.next()) {
             titles.add(new Issue(
                     resultSetReader.getColumn(0).getInt64(),

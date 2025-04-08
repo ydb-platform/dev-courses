@@ -10,7 +10,8 @@ import tech.ydb.topic.settings.WriterSettings;
 import tech.ydb.topic.write.Message;
 import tech.ydb.topic.write.SyncWriter;
 
-/**
+/*
+ * Сервис для обновления статусов тикетов через топики YDB
  * @author Kirill Kurdyukov
  */
 public class StatusUpdateService {
@@ -18,6 +19,7 @@ public class StatusUpdateService {
     private final IssueYdbRepository issueYdbRepository;
 
     public StatusUpdateService(TopicClient topicClient, IssueYdbRepository issueYdbRepository) {
+        // Создаем синхронный writer для отправки сообщений в топик task_status
         this.writer = topicClient.createSyncWriter(
                 WriterSettings.newBuilder()
                         .setProducerId("producer-task_status")
@@ -28,17 +30,20 @@ public class StatusUpdateService {
         this.writer.init();
     }
 
-    public void update(long uuid, String status) {
-        issueYdbRepository.updateStatus(uuid, status);
+    public void update(long id, String status) {
+        // Обновляем статус тикета в БД
+        issueYdbRepository.updateStatus(id, status);
 
+        // Отправляем сообщение об обновлении статуса в топик
         writer.send(Message.newBuilder()
-                .setData(("[" + uuid + " : " + status + "]").getBytes(StandardCharsets.UTF_8))
+                .setData(("[" + id + " : " + status + "]").getBytes(StandardCharsets.UTF_8))
                 .build()
         );
     }
 
     public void shutdown() {
         try {
+            // Корректно завершаем работу writer'а
             writer.shutdown(10, TimeUnit.SECONDS);
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
             throw new RuntimeException(e);

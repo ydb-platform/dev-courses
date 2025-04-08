@@ -3,17 +3,23 @@ package tech.ydb.app;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
+ * Репозиторий для управления схемой базы данных YDB
+ * Отвечает за создание и удаление таблиц и индексов
  * @author Kirill Kurdyukov
  */
 public class SchemaYdbRepository {
 
+    // Контекст для автоматических повторных попыток выполнения запросов
     private final SessionRetryContext retryCtx;
 
     public SchemaYdbRepository(SessionRetryContext retryCtx) {
         this.retryCtx = retryCtx;
     }
 
+    /*
+     * Создает таблицы и индексы в базе данных
+     */
     public void createSchema() {
         retryCtx.supplyResult(
                 session -> session.createQuery(
@@ -29,6 +35,8 @@ public class SchemaYdbRepository {
                 ).execute()
         ).join().getStatus().expectSuccess("Can't create table issues");
 
+        // Создаем глобальный вторичный индекс по полю author
+        // Этот индекс позволяет эффективно искать тикеты по автору
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
@@ -37,6 +45,7 @@ public class SchemaYdbRepository {
                 ).execute()
         ).join().getStatus().expectSuccess("Can't create an author column and index");
 
+        // Добавляем колонку link_count и создаем таблицу для связей между тикетами
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """

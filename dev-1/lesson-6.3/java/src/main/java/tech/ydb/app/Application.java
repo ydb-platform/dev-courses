@@ -29,7 +29,8 @@ import tech.ydb.topic.settings.TopicReadSettings;
 import tech.ydb.topic.settings.WriterSettings;
 import tech.ydb.topic.write.Message;
 
-/**
+/*
+ * Пример обработки файла с использованием транзакционных операций с топиками YDB
  * @author Kirill Kurdyukov
  */
 public class Application {
@@ -83,6 +84,7 @@ public class Application {
                 var lineNumber = new AtomicLong(lineNumberLong);
                 var origLineNumber = new AtomicLong(1);
 
+                // Читаем файл построчно и отправляем строки в топик в рамках транзакции
                 lines.forEach(line -> {
                     if (origLineNumber.getAndIncrement() < lineNumber.get()) {
                                 return;
@@ -91,7 +93,18 @@ public class Application {
                     var lineNumberCur = lineNumber.getAndIncrement();
                     retryCtx.supplyStatus(
                                     session -> {
+                                        // Начинаем интерактивную транзакцию
                                         var transaction = session.beginTransaction(TxMode.SERIALIZABLE_RW).join().getValue();
+                                        
+                                        // При транзакционной записи нужно создавать писателя для каждой транзакции
+                                        // иначе встретиться со сложными для отладки проблемами в виде внезапной 
+                                        // остановки писателя и необходимости его пересоздания.
+
+                                        // Транзакций обычно много, поэтому producerID нужно указывать явно - чтобы 
+                                        // не перегружать кластер их большим количеством.
+                                        // Важно чтобы producerID был уникальным в каждый момент времени, 
+                                        // т.к. при параллельном подключении двух писателей с одинаковым ProducerID
+                                        // один из них получит ошибку и будет закрыт.
                                         var writer = topicClient.createSyncWriter(
                                                 WriterSettings.newBuilder()
                                                         .setProducerId("producer-file")
@@ -100,6 +113,7 @@ public class Application {
                                         );
                                         writer.initAndWait();
 
+                                        // Отправляем сообщение в топик в рамках транзакции
                                         writer.send(
                                                 Message.newBuilder()
                                                         .setSeqNo(lineNumberCur)
@@ -119,6 +133,10 @@ public class Application {
                                                         "$line_num", PrimitiveValue.newInt64(lineNumberCur))
                                         ).execute().join().getStatus().expectSuccess();
 
+                                        // Фиксируем транзакцию.
+                                        // В этот момент транзакция будет завершена и гарантируется атомарность операций
+                                        // и с топиками и с таблицами, т.е. можно работать естественным для БД образом даже
+                                        // если в операциях теперь участвует очередь сообщений (топик).
                                         transaction.commit().join();
 
                                         try {
@@ -147,11 +165,14 @@ public class Application {
 
         while (!stopped_read_process.get()) {
             try {
+                // Обрабатываем сообщения в транзакционном режиме
                 retryCtx.supplyStatus(session -> {
+                    // Начинаем интерактивную транзакцию
                     var tx = session.beginTransaction(TxMode.SERIALIZABLE_RW).join().getValue();
 
                     tech.ydb.topic.read.Message message;
                     try {
+                        // Читаем сообщение в рамках транзакции
                         message = reader.receive(ReceiveSettings.newBuilder()
                                 .setTransaction(tx)
                                 .setTimeout(1, TimeUnit.SECONDS)
@@ -161,6 +182,7 @@ public class Application {
                         throw new RuntimeException(e);
                     }
 
+                    // Если сообщение не найдено, то откатываем транзакцию
                     if (message == null) {
                         tx.rollback().join();
                         return CompletableFuture.completedFuture(Status.SUCCESS);
@@ -184,6 +206,10 @@ public class Application {
                                     "$length", PrimitiveValue.newInt64(length)
                             )
                     ).execute().join().getStatus().expectSuccess();
+                    // Фиксируем транзакцию
+                    // В этот момент транзакция будет завершена и гарантируется атомарность операций
+                    // и с топиками и с таблицами, т.е. можно работать естественным для БД образом даже
+                    // если в операциях теперь участвует очередь сообщений (топик).
                     tx.commit().join();
 
                     return CompletableFuture.completedFuture(Status.SUCCESS);

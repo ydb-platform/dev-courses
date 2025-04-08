@@ -4,11 +4,13 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
+ * Пример работы с индексами в YDB: создание и использование вторичных индексов
  * @author Kirill Kurdyukov
  */
 public class Application {
 
+    // Строка подключения к локальной базе данных YDB
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
@@ -33,6 +35,7 @@ public class Application {
                     printIssue(issue);
                 }
 
+                // Демонстрация поиска по вторичному индексу authorIndex
                 System.out.println("Find by index `authorIndex`: ");
                 printIssue(issueYdbRepository.findByAuthor("Author 2"));
             }
