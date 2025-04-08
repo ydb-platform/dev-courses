@@ -9,7 +9,7 @@ import tech.ydb.topic.read.SyncReader;
 import tech.ydb.topic.settings.ReaderSettings;
 import tech.ydb.topic.settings.TopicReadSettings;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class ReaderChangefeedWorker {

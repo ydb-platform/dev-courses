@@ -9,7 +9,7 @@ import tech.ydb.topic.read.SyncReader;
 import tech.ydb.topic.settings.ReaderSettings;
 import tech.ydb.topic.settings.TopicReadSettings;
 
-/**
+/*
  * Воркер для чтения сообщений из топика YDB
  * @author Kirill Kurdyukov
  */

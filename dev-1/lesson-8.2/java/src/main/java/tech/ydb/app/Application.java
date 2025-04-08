@@ -12,7 +12,7 @@ import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.TableClient;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class Application {

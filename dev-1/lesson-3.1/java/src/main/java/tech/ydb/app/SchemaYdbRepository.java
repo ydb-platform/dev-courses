@@ -3,7 +3,7 @@ package tech.ydb.app;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
  * Репозиторий для управления схемой базы данных YDB
  * Отвечает за создание и удаление таблиц
  * @author Kirill Kurdyukov
@@ -17,7 +17,7 @@ public class SchemaYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    /**
+    /*
      * Создает таблицу issues в базе данных
      * Таблица содержит поля:
      * - id: уникальный идентификатор тикета
@@ -41,7 +41,7 @@ public class SchemaYdbRepository {
         ).join().getStatus().expectSuccess("Can't create table issues");
     }
 
-    /**
+    /*
      * Удаляет таблицу issues из базы данных
      * Используется для очистки схемы перед созданием новой
      */

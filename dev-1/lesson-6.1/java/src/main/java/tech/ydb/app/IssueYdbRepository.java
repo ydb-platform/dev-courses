@@ -14,7 +14,7 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {

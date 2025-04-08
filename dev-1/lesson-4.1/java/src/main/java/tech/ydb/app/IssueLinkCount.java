@@ -2,7 +2,7 @@ package tech.ydb.app;
 
 import java.util.UUID;
 
-/**
+/*
  * Модель данных для представления результата операции связывания тикетов
  * @author Kirill Kurdyukov
  */

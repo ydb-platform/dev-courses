@@ -6,7 +6,7 @@ import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.topic.TopicClient;
 
-/**
+/*
  * Пример работы с changefeed в YDB
  * @author Kirill Kurdyukov
  */

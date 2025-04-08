@@ -5,7 +5,7 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class Application {

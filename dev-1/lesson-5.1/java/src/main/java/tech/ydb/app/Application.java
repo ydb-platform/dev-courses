@@ -4,7 +4,7 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
  * Пример работы с индексами в YDB: создание и использование вторичных индексов
  * @author Kirill Kurdyukov
  */

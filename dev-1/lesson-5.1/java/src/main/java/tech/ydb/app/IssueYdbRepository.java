@@ -14,7 +14,7 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
-/**
+/*
  * Репозиторий для работы с тикетами в базе данных YDB
  * @author Kirill Kurdyukov
  */
@@ -25,7 +25,7 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    /**
+    /*
      * Связывает два тикета в рамках неинтерактивной транзакции
      * Все операции (обновление счетчиков, добавление связей, чтение результатов) 
      * выполняются в одной транзакции
@@ -55,7 +55,7 @@ public class IssueYdbRepository {
         return getLinkTicketPairs(valueReader);
     }
 
-    /**
+    /*
      * Связывает два тикета в рамках интерактивной транзакции
      */
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
@@ -102,7 +102,7 @@ public class IssueYdbRepository {
         ).join().getValue();
     }
 
-    /**
+    /*
      * Добавляет новый тикет в базу данных
      * @param title название тикета
      * @param author автор тикета
@@ -132,7 +132,7 @@ public class IssueYdbRepository {
         ).join().getStatus().expectSuccess("Failed upsert title");
     }
 
-    /**
+    /*
      * Получает все тикеты из базы данных
      * @return список всех тикетов
      */
@@ -159,7 +159,7 @@ public class IssueYdbRepository {
         return titles;
     }
 
-    /**
+    /*
      * Находит тикет по автору, используя вторичный индекс authorIndex
      * @param author имя автора для поиска
      * @return найденный тикет
@@ -193,7 +193,7 @@ public class IssueYdbRepository {
         );
     }
 
-    /**
+    /*
      * Преобразует результаты запроса в список объектов
      */
     private static List<IssueLinkCount> getLinkTicketPairs(QueryReader valueReader) {

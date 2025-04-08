@@ -18,7 +18,7 @@ import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.StructType;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
@@ -28,7 +28,7 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    /**
+    /*
      * Эффективный поиск тикетов по списку идентификаторов
      */
     public List<Issue> findByIds(List<Long> ids) {
@@ -49,7 +49,7 @@ public class IssueYdbRepository {
         return fetchIssues(queryReader);
     }
 
-    /**
+    /*
      * Пакетное добавление нескольких тикетов за один запрос
      */
     public void saveAll(List<TitleAuthor> titleAuthors) {
@@ -210,7 +210,7 @@ public class IssueYdbRepository {
         return fetchIssues(resultSet);
     }
 
-    /**
+    /*
      * Поиск тикетов со статусом "future" с обновлением их статуса в неинтерактивной транзакции
      * С реализацией логики на YQL
      */
@@ -247,7 +247,7 @@ public class IssueYdbRepository {
         return linkTicketPairs;
     }
 
-    /**
+    /*
      * Пакетное удаление тикетов с обновлением счетчиков связанных тикетов в неинтерактивной транзакции
      * Демонстрирует использование именованных выражений, лямбда-функций и сложных запросов
      */

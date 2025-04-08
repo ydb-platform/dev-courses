@@ -18,7 +18,7 @@ import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.StructType;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {

@@ -4,7 +4,7 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
  * Пример работы с транзакциями в YDB, урок - 4.1 Распределенные транзакции
  * @author Kirill Kurdyukov
  */

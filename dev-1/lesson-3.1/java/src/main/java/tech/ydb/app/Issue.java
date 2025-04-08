@@ -3,7 +3,7 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
+/*
  * Модель данных для представления тикета в примере
  * @author Kirill Kurdyukov
  */

@@ -29,7 +29,7 @@ import tech.ydb.topic.settings.TopicReadSettings;
 import tech.ydb.topic.settings.WriterSettings;
 import tech.ydb.topic.write.Message;
 
-/**
+/*
  * Пример обработки файла с использованием транзакционных операций с топиками YDB
  * @author Kirill Kurdyukov
  */

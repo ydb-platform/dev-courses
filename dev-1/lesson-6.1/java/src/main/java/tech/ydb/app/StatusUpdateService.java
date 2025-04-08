@@ -10,7 +10,7 @@ import tech.ydb.topic.settings.WriterSettings;
 import tech.ydb.topic.write.Message;
 import tech.ydb.topic.write.SyncWriter;
 
-/**
+/*
  * Сервис для обновления статусов тикетов через топики YDB
  * @author Kirill Kurdyukov
  */

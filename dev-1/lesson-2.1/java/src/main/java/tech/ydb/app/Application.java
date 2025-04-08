@@ -7,7 +7,7 @@ import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.result.ResultSetReader;
 
-/**
+/*
  * @author Kirill Kurdyukov
  */
 public class Application {
@@ -16,7 +16,7 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
-        // Создаем транспортный уровень для подключения к YDB через gRPC
+        // Создаем драйвер для подключения к YDB через gRPC
         try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
             // Создаем клиент для выполнения SQL-запросов
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
@@ -29,7 +29,7 @@ public class Application {
         }
     }
 
-    /**
+    /*
      * Класс для работы с YDB, инкапсулирующий логику выполнения запросов
      */
     public static class YdbRepository {
@@ -39,7 +39,7 @@ public class Application {
             this.retryCtx = retryCtx;
         }
 
-        /**
+        /*
          * Выполняет простой SQL-запрос SELECT 1 для проверки работоспособности базы данных
          * @return результат запроса (всегда 1)
          */

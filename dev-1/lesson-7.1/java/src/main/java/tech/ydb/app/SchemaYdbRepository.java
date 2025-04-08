@@ -3,7 +3,7 @@ package tech.ydb.app;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/**
+/*
  * Репозиторий для управления схемой YDB, включая создание и удаление таблиц и changefeed
  * @author Kirill Kurdyukov
  */
