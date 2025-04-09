@@ -5,6 +5,8 @@ import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.topic.TopicClient;
 
+import java.time.Duration;
+
 /*
  * Пример работы с топиками в YDB
  * @author Kirill Kurdyukov
@@ -14,7 +16,10 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) throws InterruptedException {
-        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build();
+        try (GrpcTransport grpcTransport = GrpcTransport
+                .forConnectionString(CONNECTION_STRING)
+                .withConnectTimeout(Duration.ofSeconds(10)
+                ).build();
              QueryClient queryClient = QueryClient.newClient(grpcTransport).build();
              TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
             var retryCtx = SessionRetryContext.create(queryClient).build();

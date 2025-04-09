@@ -4,6 +4,8 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
+import java.time.Duration;
+
 /*
  * Пример работы с транзакциями в YDB, урок - 4.1 Распределенные транзакции
  * @author Kirill Kurdyukov
@@ -14,7 +16,10 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
-        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
+        try (GrpcTransport grpcTransport = GrpcTransport
+                .forConnectionString(CONNECTION_STRING)
+                .withConnectTimeout(Duration.ofSeconds(10)
+                ).build()) {
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 var retryCtx = SessionRetryContext.create(queryClient).build();
 
