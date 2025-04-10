@@ -5,6 +5,7 @@ import com.opencsv.exceptions.CsvException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import tech.ydb.core.grpc.GrpcTransport;
@@ -21,7 +22,10 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
-        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build();
+        try (GrpcTransport grpcTransport = GrpcTransport
+                .forConnectionString(CONNECTION_STRING)
+                .withConnectTimeout(Duration.ofSeconds(10)
+                ).build();
              TableClient tableClient = TableClient.newClient(grpcTransport).build();
              QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
             var retryCtx = SessionRetryContext.create(queryClient).build();

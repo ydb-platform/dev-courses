@@ -7,6 +7,8 @@ import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.result.ResultSetReader;
 
+import java.time.Duration;
+
 /*
  * @author Kirill Kurdyukov
  */
@@ -17,7 +19,10 @@ public class Application {
 
     public static void main(String[] args) {
         // Создаем драйвер для подключения к YDB через gRPC
-        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build()) {
+        try (GrpcTransport grpcTransport = GrpcTransport
+                .forConnectionString(CONNECTION_STRING)
+                .withConnectTimeout(Duration.ofSeconds(10)
+                ).build()) {
             // Создаем клиент для выполнения SQL-запросов
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 // Создаем контекст для автоматических повторных попыток выполнения запросов

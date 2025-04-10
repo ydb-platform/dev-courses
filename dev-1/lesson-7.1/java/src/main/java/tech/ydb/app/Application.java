@@ -1,5 +1,6 @@
 package tech.ydb.app;
 
+import java.time.Duration;
 import java.util.UUID;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
@@ -15,7 +16,10 @@ public class Application {
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) throws InterruptedException {
-        try (GrpcTransport grpcTransport = GrpcTransport.forConnectionString(CONNECTION_STRING).build();
+        try (GrpcTransport grpcTransport = GrpcTransport
+                .forConnectionString(CONNECTION_STRING)
+                .withConnectTimeout(Duration.ofSeconds(10)
+                ).build();
              QueryClient queryClient = QueryClient.newClient(grpcTransport).build();
              TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
             var retryCtx = SessionRetryContext.create(queryClient).build();
