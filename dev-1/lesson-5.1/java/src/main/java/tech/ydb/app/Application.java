@@ -1,25 +1,29 @@
 package tech.ydb.app;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
 import java.time.Duration;
 
-/*
+/**
  * Пример работы с индексами в YDB: создание и использование вторичных индексов
+ *
  * @author Kirill Kurdyukov
  */
 public class Application {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
     // Строка подключения к локальной базе данных YDB
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
-                .withConnectTimeout(Duration.ofSeconds(10)
-                ).build()) {
+                .withConnectTimeout(Duration.ofSeconds(10))
+                .build()
+        ) {
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 var retryCtx = SessionRetryContext.create(queryClient).build();
 
@@ -35,19 +39,19 @@ public class Application {
 
                 var allIssues = issueYdbRepository.findAll();
 
-                System.out.println("Print all tickets: ");
+                LOGGER.info("Print all tickets: ");
                 for (var issue : allIssues) {
                     printIssue(issue);
                 }
 
                 // Демонстрация поиска по вторичному индексу authorIndex
-                System.out.println("Find by index `authorIndex`: ");
+                LOGGER.info("Find by index `authorIndex`: ");
                 printIssue(issueYdbRepository.findByAuthor("Author 2"));
             }
         }
     }
 
     private static void printIssue(Issue issue) {
-        System.out.println("Issue: {id: " + issue.id() + ", title: " + issue.title() + ", timestamp: " + issue.now() + ", author: " + issue.author() + ", link_count: " + issue + "}");
+        LOGGER.info("Issue: {}", issue);
     }
 }

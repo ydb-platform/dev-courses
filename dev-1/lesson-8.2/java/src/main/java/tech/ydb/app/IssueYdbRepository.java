@@ -3,7 +3,7 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -18,7 +18,7 @@ import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.StructType;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
@@ -48,7 +48,7 @@ public class IssueYdbRepository {
 
     public void saveAll(List<TitleAuthor> titleAuthors) {
         var structType = StructType.of(
-                "id", PrimitiveType.Uuid,
+                "id", PrimitiveType.Int64,
                 "title", PrimitiveType.Text,
                 "author", PrimitiveType.Text,
                 "created_at", OptionalType.of(PrimitiveType.Timestamp)
@@ -56,7 +56,7 @@ public class IssueYdbRepository {
 
         var listIssues = Params.of("$args", ListType.of(structType).newValue(
                 titleAuthors.stream().map(issue -> structType.newValue(
-                        "id", PrimitiveValue.newUuid(UUID.randomUUID()),
+                        "id", PrimitiveValue.newInt64(ThreadLocalRandom.current().nextInt()),
                         "title", PrimitiveValue.newText(issue.title()),
                         "author", PrimitiveValue.newText(issue.author()),
                         "created_at", OptionalType.of(PrimitiveType.Timestamp)
@@ -68,7 +68,7 @@ public class IssueYdbRepository {
                 session -> session.createQuery(
                         """
                                 DECLARE $args AS List<Struct<
-                                id: UUID,
+                                id: Int64,
                                 title: Text,
                                 author: Text,
                                 created_at: Timestamp?, -- тут знак вопроса означает, что в Timestamp может быть передан NULL

@@ -8,26 +8,30 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.TableClient;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class Application {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
     private static final String PATH = "/dev-1/lesson-8.2/java/title_author.csv";
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
-                .withConnectTimeout(Duration.ofSeconds(10)
-                ).build();
+                .withConnectTimeout(Duration.ofSeconds(10))
+                .build();
              TableClient tableClient = TableClient.newClient(grpcTransport).build();
-             QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
+             QueryClient queryClient = QueryClient.newClient(grpcTransport).build()
+        ) {
             var retryCtx = SessionRetryContext.create(queryClient).build();
             var retryTableCtx = tech.ydb.table.SessionRetryContext.create(tableClient).build();
 
@@ -51,7 +55,7 @@ public class Application {
                     titleAuthorList.add(new TitleAuthor(title, author));
                 }
             } catch (IOException | CsvException e) {
-                System.err.println(e.getMessage());
+                LOGGER.error(e.getMessage());
 
                 throw new RuntimeException(e);
             }
@@ -60,7 +64,7 @@ public class Application {
             nativeApiYdbRepository.bulkUpsert("/local/issues", titleAuthorList);
 
             Issue lastIssue = null;
-            System.out.println("Print all issues: ");
+            LOGGER.info("Print all issues: ");
             for (var issue : issueYdbRepository.findAll()) {
                 printIssue(issue);
 
@@ -68,13 +72,13 @@ public class Application {
             }
 
             // Чтение всех данных через Key-Value API
-            System.out.println("ReadTable: ");
+            LOGGER.info("ReadTable: ");
             for (var issue : nativeApiYdbRepository.readTable("/local/issues")) {
                 printIssue(issue);
             }
 
             // Чтение данных по ключу через Key-Value API
-            System.out.println("ReadRows: ");
+            LOGGER.info("ReadRows: ");
             assert lastIssue != null;
             for (var issue : nativeApiYdbRepository.readRows("/local/issues", lastIssue.id())) {
                 printIssue(issue);
@@ -83,8 +87,6 @@ public class Application {
     }
 
     private static void printIssue(Issue issue) {
-        System.out.println("Ticket: {id: " + issue.id() + ", title: " + issue.title() + ", timestamp: "
-                + issue.now() + ", author: " + issue.author() + ", link_count: "
-                + issue.linkCounts() + ", status: " + issue.status() + "}");
+        LOGGER.info("Issue: {}", issue);
     }
 }

@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -14,7 +13,7 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {

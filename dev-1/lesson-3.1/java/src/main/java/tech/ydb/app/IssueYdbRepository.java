@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import tech.ydb.common.transaction.TxMode;
@@ -12,12 +11,14 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
-/*
+/**
  * Репозиторий для работы с тикетами в базе данных YDB
  * Реализует операции добавления и чтения тикетов
+ *
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
+
     // Контекст для автоматических повторных попыток выполнения запросов
     // Принимается извне через конструктор для:
     // 1. Следования принципу Dependency Injection - зависимости класса передаются ему извне
@@ -30,10 +31,11 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    /*
+    /**
      * Добавляет новый тикет в базу данных
+     *
      * @param title название тикета
-     * @return созданный тикет с сгенерированным ID и временем создания
+     * @return созданный тикет со сгенерированным ID и временем создания
      */
     public Issue addIssue(String title) {
         // Генерируем случайный ID для тикета
@@ -63,8 +65,9 @@ public class IssueYdbRepository {
         return new Issue(id, title, now);
     }
 
-    /*
+    /**
      * Получает все тикеты из базы данных
+     *
      * @return список всех тикетов
      */
     public List<Issue> findAll() {

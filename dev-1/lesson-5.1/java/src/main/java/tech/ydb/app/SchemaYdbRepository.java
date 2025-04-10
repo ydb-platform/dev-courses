@@ -3,9 +3,10 @@ package tech.ydb.app;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/*
+/**
  * Репозиторий для управления схемой базы данных YDB
  * Отвечает за создание и удаление таблиц и индексов
+ *
  * @author Kirill Kurdyukov
  */
 public class SchemaYdbRepository {
@@ -17,14 +18,14 @@ public class SchemaYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    /*
+    /**
      * Создает таблицы и индексы в базе данных
      */
     public void createSchema() {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                CREATE TABLE issues (
+                                CREATE TABLE IF NOT EXISTS issues (
                                     id Int64 NOT NULL,
                                     title Text NOT NULL,
                                     created_at Timestamp NOT NULL,

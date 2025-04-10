@@ -29,6 +29,11 @@
             <groupId>tech.ydb</groupId>
             <artifactId>ydb-sdk-query</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>2.24.1</version>
+        </dependency>
     </dependencies>
 
     <build>

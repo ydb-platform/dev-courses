@@ -1,5 +1,7 @@
 package tech.ydb.app;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
@@ -9,32 +11,36 @@ import tech.ydb.table.result.ResultSetReader;
 
 import java.time.Duration;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class Application {
-    // Строка подключения к локальной базе данных YDB
-    // Формат: grpc://<хост>:<порт>/<путь к базе данных>
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
+
+    /**
+     * Строка подключения к локальной базе данных YDB
+     * Формат: grpc://<хост>:<порт>/<путь к базе данных>
+     */
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
         // Создаем драйвер для подключения к YDB через gRPC
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
-                .withConnectTimeout(Duration.ofSeconds(10)
-                ).build()) {
+                .withConnectTimeout(Duration.ofSeconds(10))
+                .build()
+        ) {
             // Создаем клиент для выполнения SQL-запросов
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 // Создаем контекст для автоматических повторных попыток выполнения запросов
                 SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-                System.out.println("Database is available! Result `SELECT 1;` command: " +
-                        new YdbRepository(retryCtx).SelectOne());
+                LOGGER.info("Database is available! Result `SELECT 1;` command: {}", new YdbRepository(retryCtx).SelectOne());
             }
         }
     }
 
-    /*
+    /**
      * Класс для работы с YDB, инкапсулирующий логику выполнения запросов
      */
     public static class YdbRepository {
@@ -44,8 +50,9 @@ public class Application {
             this.retryCtx = retryCtx;
         }
 
-        /*
+        /**
          * Выполняет простой SQL-запрос SELECT 1 для проверки работоспособности базы данных
+         *
          * @return результат запроса (всегда 1)
          */
         public int SelectOne() {

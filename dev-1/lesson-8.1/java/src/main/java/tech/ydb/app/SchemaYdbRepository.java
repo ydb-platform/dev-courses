@@ -3,7 +3,7 @@ package tech.ydb.app;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class SchemaYdbRepository {
@@ -18,7 +18,7 @@ public class SchemaYdbRepository {
         retryCtx.supplyResult(
                 session -> session.createQuery(
                         """
-                                CREATE TABLE issues (
+                                CREATE TABLE IF NOT EXISTS issues (
                                     id Int64 NOT NULL,
                                     title Text NOT NULL,
                                     created_at Timestamp NOT NULL,
@@ -41,7 +41,7 @@ public class SchemaYdbRepository {
                 session -> session.createQuery(
                         """
                                 ALTER TABLE issues ADD COLUMN link_count Int64;
-                                CREATE TABLE links (
+                                CREATE TABLE IF NOT EXISTS links (
                                     source Int64 NOT NULL,
                                     destination Int64 NOT NULL,
                                     PRIMARY KEY(source, destination)

@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -18,7 +17,7 @@ import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.StructType;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class KeyValueApiYdbRepository {
@@ -29,7 +28,7 @@ public class KeyValueApiYdbRepository {
         this.retryTableCtx = retryTableCtx;
     }
 
-    /*
+    /**
      * Массовое добавление или обновление тикетов в таблице.
      */
     public void bulkUpsert(String tableName, List<TitleAuthor> titleAuthorList) {
@@ -59,7 +58,7 @@ public class KeyValueApiYdbRepository {
                 .join().expectSuccess();
     }
 
-    /*
+    /**
      * Чтение всех данных из таблицы.
      * Использует executeReadTable для получения всех записей.
      */
@@ -82,7 +81,7 @@ public class KeyValueApiYdbRepository {
         ).join().getValue();
     }
 
-    /*
+    /**
      * Чтение данных из таблицы по ключу.
      * Использует readRows для получения записей по конкретному id.
      */
@@ -106,7 +105,7 @@ public class KeyValueApiYdbRepository {
         ).join().getValue();
     }
 
-    /*
+    /**
      * Вспомогательный метод для преобразования результатов запроса в объекты Issue.
      * Обрабатывает различные варианты структуры данных (с link_count и status или без них).
      */

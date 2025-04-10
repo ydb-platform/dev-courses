@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -14,9 +13,10 @@ import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
 
-/*
+/**
  * Репозиторий для работы с тикетами в базе данных YDB
  * Реализует операции добавления, чтения и связывания тикетов
+ *
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
@@ -27,9 +27,9 @@ public class IssueYdbRepository {
         this.retryCtx = retryCtx;
     }
 
-    /*
+    /**
      * Связывает два тикета в рамках неинтерактивной транзакции
-     * Все операции (обновление счетчиков, добавление связей, чтение результатов) 
+     * Все операции (обновление счетчиков, добавление связей, чтение результатов)
      * выполняются за один запрос к YDB.
      */
     public List<IssueLinkCount> linkTicketsNoInteractive(long idT1, long idT2) {
@@ -60,14 +60,14 @@ public class IssueYdbRepository {
         return getLinkTicketPairs(valueReader);
     }
 
-    /*
+    /**
      * Связывает два тикета в рамках интерактивной транзакции
      * Операции выполняются последовательными запросами к YDB:
      * 1. Обновление счетчиков связей
      * 2. Добавление записей о связях
      * 3. Чтение обновленных данных
-     * 
-     * Между запросами к YDB может быть выполнена логика на стороне приложения, 
+     * <p>
+     * Между запросами к YDB может быть выполнена логика на стороне приложения,
      * для определения стоит ли продолжать транзакцию и какой запрос выполнить следующим.
      */
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
@@ -118,9 +118,10 @@ public class IssueYdbRepository {
         ).join().getValue();
     }
 
-    /*
+    /**
      * Добавляет новый тикет в базу данных
-     * @param title название тикета
+     *
+     * @param title  название тикета
      * @param author автор тикета
      */
     public void addIssue(String title, String author) {
@@ -148,8 +149,9 @@ public class IssueYdbRepository {
         ).join().getStatus().expectSuccess("Failed upsert title");
     }
 
-    /*
+    /**
      * Получает все тикеты из базы данных
+     *
      * @return список всех тикетов
      */
     public List<Issue> findAll() {
@@ -175,7 +177,7 @@ public class IssueYdbRepository {
         return titles;
     }
 
-    /*
+    /**
      * Преобразует результаты запроса в список объектов IssueLinkCount
      */
     private static List<IssueLinkCount> getLinkTicketPairs(QueryReader valueReader) {
