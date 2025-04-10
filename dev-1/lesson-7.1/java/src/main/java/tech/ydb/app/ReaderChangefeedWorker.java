@@ -4,15 +4,19 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.topic.TopicClient;
 import tech.ydb.topic.read.SyncReader;
 import tech.ydb.topic.settings.ReaderSettings;
 import tech.ydb.topic.settings.TopicReadSettings;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class ReaderChangefeedWorker {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
+
     private final SyncReader reader;
     private final AtomicBoolean stoppedProcess = new AtomicBoolean();
 
@@ -36,7 +40,7 @@ public class ReaderChangefeedWorker {
     public void run() {
         readerJob = CompletableFuture.runAsync(
                 () -> {
-                    System.out.println("Started read worker!");
+                    LOGGER.info("Started read worker!");
 
                     while (!stoppedProcess.get()) {
                         try {
@@ -46,13 +50,13 @@ public class ReaderChangefeedWorker {
                                 continue;
                             }
 
-                            System.out.println("Received message: " + new String(message.getData()));
+                            LOGGER.info("Received message: {}", new String(message.getData()));
                         } catch (Exception e) {
                             // Ignored
                         }
                     }
 
-                    System.out.println("Stopped read worker!");
+                    LOGGER.info("Stopped read worker!");
                 }
         );
     }

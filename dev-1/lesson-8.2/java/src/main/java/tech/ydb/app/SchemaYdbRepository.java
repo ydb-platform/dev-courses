@@ -3,7 +3,7 @@ package tech.ydb.app;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class SchemaYdbRepository {

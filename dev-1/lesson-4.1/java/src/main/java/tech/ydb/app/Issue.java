@@ -1,17 +1,17 @@
 package tech.ydb.app;
 
 import java.time.Instant;
-import java.util.UUID;
 
-/*
+/**
  * Модель данных для представления тикета в системе
+ *
  * @author Kirill Kurdyukov
  */
 public record Issue(
-    long id,           // Уникальный идентификатор тикета
-    String title,      // Название тикета
-    Instant now,       // Время создания тикета
-    String author,     // Автор тикета
-    long linkCounts    // Количество связей с другими тикетами
+        long id,           // Уникальный идентификатор тикета
+        String title,      // Название тикета
+        Instant now,       // Время создания тикета
+        String author,     // Автор тикета
+        long linkCounts    // Количество связей с другими тикетами
 ) {
 }

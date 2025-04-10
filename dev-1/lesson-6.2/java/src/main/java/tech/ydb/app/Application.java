@@ -10,6 +10,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcTransport;
@@ -26,22 +28,25 @@ import tech.ydb.topic.settings.TopicReadSettings;
 import tech.ydb.topic.settings.WriterSettings;
 import tech.ydb.topic.write.Message;
 
-/*
+/**
  * Пример обработки файла с использованием топиков YDB
+ *
  * @author Kirill Kurdyukov
  */
 public class Application {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
     private static final String PATH = "/dev-1/lesson-6.2/java/file.txt";
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) throws IOException, InterruptedException {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
-                .withConnectTimeout(Duration.ofSeconds(10)
-                ).build();
+                .withConnectTimeout(Duration.ofSeconds(10))
+                .build();
              QueryClient queryClient = QueryClient.newClient(grpcTransport).build();
-             TopicClient topicClient = TopicClient.newClient(grpcTransport).build()) {
+             TopicClient topicClient = TopicClient.newClient(grpcTransport).build()
+        ) {
 
             var retryCtx = SessionRetryContext.create(queryClient).build();
 
@@ -143,7 +148,7 @@ public class Application {
     }
 
     private static void runReadJob(AtomicBoolean stopped_read_process, SyncReader reader, SessionRetryContext retryCtx) {
-        System.out.println("Started read worker!");
+        LOGGER.info("Started read worker!");
 
         while (!stopped_read_process.get()) {
             try {
@@ -226,22 +231,22 @@ public class Application {
                 }).join().expectSuccess();
 
             } catch (Exception e) {
-                System.out.println(e.getMessage());
+                LOGGER.error(e.getMessage());
             }
         }
 
-        System.out.println("Stopped read worker!");
+        LOGGER.info("Stopped read worker!");
     }
 
     private static void printTableFile(SessionRetryContext retryCtx) {
-        // Выводим информацию о обработанных строках
+        // Выводим информацию об обработанных строках
         var queryReader = retryCtx.supplyResult(session ->
                 QueryReader.readFrom(session.createQuery("SELECT name, line, length FROM file;", TxMode.SERIALIZABLE_RW))
         ).join().getValue();
 
         for (ResultSetReader resultSet : queryReader) {
             while (resultSet.next()) {
-                System.out.println(
+                LOGGER.info(
                         "name: " + resultSet.getColumn(0).getText() +
                                 ", line: " + resultSet.getColumn(1).getInt64() +
                                 ", length: " + resultSet.getColumn(2).getInt64()
@@ -253,7 +258,7 @@ public class Application {
     private static void createSchema(SessionRetryContext retryCtx) {
         // Создаем таблицы для хранения информации о файле и прогрессе обработки
         executeSchema(retryCtx, """
-                CREATE TABLE file (
+                CREATE TABLE IF NOT EXISTS file (
                     name Text NOT NULL,
                     line Int64 NOT NULL,
                     length Int64 NOT NULL,
@@ -263,19 +268,19 @@ public class Application {
                 -- Таблица для хранения прогресса обработки партиции
                 -- используется для того, чтобы не повторять обработку сообщений
                 -- при перезапуске процесса.
-                CREATE TABLE file_progress (
+                CREATE TABLE IF NOT EXISTS file_progress (
                     partition_id Int64 NOT NULL,
                     last_offset Int64 NOT NULL,
                     PRIMARY KEY (partition_id)
                 );
                                 
-                CREATE TABLE write_file_progress (
+                CREATE TABLE IF NOT EXISTS write_file_progress (
                     name Text NOT NULL,
                     line_num Int64 NOT NULL,
                     PRIMARY KEY (name)
                 );
                                                     
-                CREATE TOPIC file_topic (
+                CREATE TOPIC IF NOT EXISTS file_topic (
                     CONSUMER file_consumer
                 ) WITH(
                     auto_partitioning_strategy='scale_up',
@@ -297,9 +302,7 @@ public class Application {
 
     private static void executeSchema(SessionRetryContext retryCtx, String query) {
         retryCtx.supplyResult(
-                session -> session.createQuery(
-                        query, TxMode.NONE
-                ).execute()
+                session -> session.createQuery(query, TxMode.NONE).execute()
         ).join().getStatus().expectSuccess("Can't create tables");
     }
 }

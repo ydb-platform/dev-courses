@@ -2,22 +2,24 @@ package tech.ydb.app;
 
 import java.time.Duration;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
-/*
+/**
  * @author Kirill Kurdyukov
  */
 public class Application {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
     public static void main(String[] args) {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
-                .withConnectTimeout(Duration.ofSeconds(10)
-                ).build();
+                .withConnectTimeout(Duration.ofSeconds(10))
+                .build();
              QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
             var retryCtx = SessionRetryContext.create(queryClient).build();
 
@@ -38,20 +40,20 @@ public class Application {
                 issueYdbRepository.updateStatus(issue.id(), "future");
             }
 
-            System.out.println("Find by ids [" + allTickets.get(0).id() + ", " + allTickets.get(1).id() + "]");
+            LOGGER.info("Find by ids [{}, {}]", allTickets.get(0).id(), allTickets.get(1).id());
             for (var issue : issueYdbRepository.findByIds(List.of(allTickets.get(0).id(), allTickets.get(1).id()))) {
                 printIssue(issue);
             }
 
-            System.out.println("Future issues: ");
+            LOGGER.info("Future issues: ");
             for (var issue : issueYdbRepository.findFutures()) {
-                System.out.println("Id: " + issue.id() + ", Title: " + issue.title());
+                LOGGER.info("Id: {}, Title: {}", issue.id(), issue.title());
             }
 
-            System.out.println("Deleted by ids [" + allTickets.get(0).id() + ", " + allTickets.get(1).id() + "]");
+            LOGGER.info("Deleted by ids [{}, {}]", allTickets.get(0).id(), allTickets.get(1).id());
             issueYdbRepository.deleteTasks(List.of(allTickets.get(0).id(), allTickets.get(1).id()));
 
-            System.out.println("Print all issues: ");
+            LOGGER.info("Print all issues: ");
             for (var ticket : issueYdbRepository.findAll()) {
                 printIssue(ticket);
             }
@@ -59,8 +61,6 @@ public class Application {
     }
 
     private static void printIssue(Issue issue) {
-        System.out.println("Ticket: {id: " + issue.id() + ", title: " + issue.title() + ", timestamp: "
-                + issue.now() + ", author: " + issue.author() + ", link_count: "
-                + issue.linkCounts() + ", status: " + issue.status() + "}");
+        LOGGER.info("Issue: {}", issue);
     }
 }

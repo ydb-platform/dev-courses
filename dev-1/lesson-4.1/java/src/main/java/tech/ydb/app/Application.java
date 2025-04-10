@@ -1,16 +1,20 @@
 package tech.ydb.app;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.tools.SessionRetryContext;
 
 import java.time.Duration;
 
-/*
+/**
  * Пример работы с транзакциями в YDB, урок - 4.1 Распределенные транзакции
+ *
  * @author Kirill Kurdyukov
  */
 public class Application {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
 
     // Строка подключения к локальной базе данных YDB
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
@@ -18,8 +22,9 @@ public class Application {
     public static void main(String[] args) {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
-                .withConnectTimeout(Duration.ofSeconds(10)
-                ).build()) {
+                .withConnectTimeout(Duration.ofSeconds(10))
+                .build()
+        ) {
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 var retryCtx = SessionRetryContext.create(queryClient).build();
 
@@ -36,7 +41,7 @@ public class Application {
 
                 var allIssues = issueYdbRepository.findAll();
 
-                System.out.println("Print all tickets: ");
+                LOGGER.info("Print all tickets: ");
                 for (var issue : allIssues) {
                     printIssue(issue);
                 }
@@ -45,23 +50,23 @@ public class Application {
                 var second = allIssues.get(1);
 
                 // Демонстрация неинтерактивной транзакции - все запросы выполняются за один запрос к YDB
-                System.out.println("Linked tickets by non-interactive transactions id1 = " + first.id() + ", id2 = " + second.id());
+                LOGGER.info("Linked tickets by non-interactive transactions id1 = {}, id2 = {}", first.id(), second.id());
                 var result1 = issueYdbRepository.linkTicketsNoInteractive(first.id(), second.id());
-                System.out.println("Result operation:");
+                LOGGER.info("Result operation:");
                 for (var v : result1) {
-                    System.out.println("Id = " + v.id() + ", linkCounts = " + v.linkCount());
+                    LOGGER.info("Id = {}, linkCounts = {}", v.id(), v.linkCount());
                 }
 
                 var third = allIssues.get(2);
                 // Демонстрация интерактивной транзакции - между запросами к YDB есть логика на стороне приложения
-                System.out.println("Linked tickets by interactive transactions id2 = " + second.id() + ", id3 = " + third.id());
+                LOGGER.info("Linked tickets by interactive transactions id2 = {}, id3 = {}", second.id(), third.id());
                 var result2 = issueYdbRepository.linkTicketsInteractive(second.id(), third.id());
-                System.out.println("Result operation:");
+                LOGGER.info("Result operation:");
                 for (var v : result2) {
-                    System.out.println("Id = " + v.id() + ", linkCounts = " + v.linkCount());
+                    LOGGER.info("Id = {}, linkCounts = {}", v.id(), v.linkCount());
                 }
 
-                System.out.println("Print all tickets: ");
+                LOGGER.info("Print all tickets: ");
                 for (var ticket : issueYdbRepository.findAll()) {
                     printIssue(ticket);
                 }
@@ -70,6 +75,6 @@ public class Application {
     }
 
     private static void printIssue(Issue issue) {
-        System.out.println("Issue: {id: " + issue.id() + ", title: " + issue.title() + ", timestamp: " + issue.now() + ", author: " + issue.author() + ", link_count: " + issue + "}");
+        LOGGER.info("Issue: {}", issue);
     }
 }

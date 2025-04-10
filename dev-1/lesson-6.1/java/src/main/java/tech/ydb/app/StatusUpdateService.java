@@ -1,7 +1,6 @@
 package tech.ydb.app;
 
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -10,8 +9,9 @@ import tech.ydb.topic.settings.WriterSettings;
 import tech.ydb.topic.write.Message;
 import tech.ydb.topic.write.SyncWriter;
 
-/*
+/**
  * Сервис для обновления статусов тикетов через топики YDB
+ *
  * @author Kirill Kurdyukov
  */
 public class StatusUpdateService {
