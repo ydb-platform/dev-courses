@@ -50,17 +50,16 @@ public class IssueYdbRepository {
         var structType = StructType.of(
                 "id", PrimitiveType.Int64,
                 "title", PrimitiveType.Text,
-                "author", PrimitiveType.Text,
-                "created_at", OptionalType.of(PrimitiveType.Timestamp)
+                "author", OptionalType.of(PrimitiveType.Text),
+                "created_at", PrimitiveType.Timestamp
         );
 
         var listIssues = Params.of("$args", ListType.of(structType).newValue(
                 titleAuthors.stream().map(issue -> structType.newValue(
-                        "id", PrimitiveValue.newInt64(ThreadLocalRandom.current().nextInt()),
+                        "id", PrimitiveValue.newInt64(ThreadLocalRandom.current().nextLong()),
                         "title", PrimitiveValue.newText(issue.title()),
-                        "author", PrimitiveValue.newText(issue.author()),
-                        "created_at", OptionalType.of(PrimitiveType.Timestamp)
-                                .newValue(PrimitiveValue.newTimestamp(Instant.now()))
+                        "author", OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(issue.author())),
+                        "created_at", PrimitiveValue.newTimestamp(Instant.now())
                 )).toList()
         ));
 
@@ -70,8 +69,8 @@ public class IssueYdbRepository {
                                 DECLARE $args AS List<Struct<
                                 id: Int64,
                                 title: Text,
-                                author: Text,
-                                created_at: Timestamp?, -- тут знак вопроса означает, что в Timestamp может быть передан NULL
+                                author: Text?, -- тут знак вопроса означает, что в Timestamp может быть передан NULL
+                                created_at: Timestamp,
                                 >>;
 
                                 UPSERT INTO issues

@@ -77,7 +77,7 @@ public class IssueYdbRepository {
                                 id: Int64,
                                 title: Text,
                                 author: Text?, -- тут знак вопроса означает, что в Timestamp может быть передан NULL
-                                created_at: Timestamp, 
+                                created_at: Timestamp,
                                 >>;
 
                                 UPSERT INTO issues
