@@ -33,7 +33,7 @@ public class Application {
             // Создаем клиент для выполнения SQL-запросов
             try (QueryClient queryClient = QueryClient.newClient(grpcTransport).build()) {
                 // Создаем контекст для автоматических повторных попыток выполнения запросов
-                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                var retryCtx = SessionRetryContext.create(queryClient).build();
 
                 LOGGER.info("Database is available! Result `SELECT 1;` command: {}", new YdbRepository(retryCtx).SelectOne());
             }

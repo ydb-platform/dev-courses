@@ -1,6 +1,5 @@
 package tech.ydb.app;
 
-import tech.ydb.common.transaction.TxMode;
 import tech.ydb.query.tools.SessionRetryContext;
 
 /**
@@ -11,11 +10,10 @@ import tech.ydb.query.tools.SessionRetryContext;
  */
 public class SchemaYdbRepository {
 
-    // Контекст для автоматических повторных попыток выполнения запросов
-    private final SessionRetryContext retryCtx;
+    private final QueryServiceHelper queryServiceHelper;
 
     public SchemaYdbRepository(SessionRetryContext retryCtx) {
-        this.retryCtx = retryCtx;
+        this.queryServiceHelper = new QueryServiceHelper(retryCtx);
     }
 
     /**
@@ -28,18 +26,15 @@ public class SchemaYdbRepository {
      * Все поля являются обязательными.
      */
     public void createSchema() {
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                CREATE TABLE IF NOT EXISTS issues (
-                                    id Int64 NOT NULL,
-                                    title Text NOT NULL,
-                                    created_at Timestamp NOT NULL,
-                                    PRIMARY KEY (id)
-                                );
-                                """, TxMode.NONE
-                ).execute()
-        ).join().getStatus().expectSuccess("Can't create table issues");
+        queryServiceHelper.executeQuery("""
+                CREATE TABLE IF NOT EXISTS issues (
+                    id Int64 NOT NULL,
+                    title Text NOT NULL,
+                    created_at Timestamp NOT NULL,
+                    PRIMARY KEY (id)
+                );
+                """
+        );
     }
 
     /**
@@ -47,8 +42,6 @@ public class SchemaYdbRepository {
      * Используется для очистки схемы перед созданием новой
      */
     public void dropSchema() {
-        retryCtx.supplyResult(
-                session -> session.createQuery("DROP TABLE IF EXISTS issues;", TxMode.NONE).execute()
-        ).join().getStatus().expectSuccess("Can't drop table issues");
+        queryServiceHelper.executeQuery("DROP TABLE IF EXISTS issues;");
     }
 }

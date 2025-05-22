@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 import tech.ydb.common.transaction.TxMode;
-import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
@@ -25,10 +24,10 @@ public class IssueYdbRepository {
     // 2. Улучшения тестируемости - можно передать mock-объект для тестов
     // 3. Централизованного управления конфигурацией ретраев
     // 4. Возможности переиспользования одного контекста для разных репозиториев
-    private final SessionRetryContext retryCtx;
+    private final QueryServiceHelper queryServiceHelper;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
-        this.retryCtx = retryCtx;
+        this.queryServiceHelper = new QueryServiceHelper(retryCtx);
     }
 
     /**
@@ -44,23 +43,20 @@ public class IssueYdbRepository {
 
         // Выполняем UPSERT запрос для добавления тикета
         // Изменять данные можно только в режиме транзакции SERIALIZABLE_RW, поэтому используем его
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                DECLARE $id AS Int64;
-                                DECLARE $title AS Text;
-                                DECLARE $created_at AS Timestamp;
-                                UPSERT INTO issues (id, title, created_at)
-                                VALUES ($id, $title, $created_at);
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of(
-                                "$id", PrimitiveValue.newInt64(id),
-                                "$title", PrimitiveValue.newText(title),
-                                "$created_at", PrimitiveValue.newTimestamp(now)
-                        )
-                ).execute()
-        ).join().getStatus().expectSuccess("Failed upsert title");
+        queryServiceHelper.executeQuery("""
+                        DECLARE $id AS Int64;
+                        DECLARE $title AS Text;
+                        DECLARE $created_at AS Timestamp;
+                        UPSERT INTO issues (id, title, created_at)
+                        VALUES ($id, $title, $created_at);
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of(
+                        "$id", PrimitiveValue.newInt64(id),
+                        "$title", PrimitiveValue.newText(title),
+                        "$created_at", PrimitiveValue.newTimestamp(now)
+                )
+        );
 
         return new Issue(id, title, now);
     }
@@ -76,11 +72,8 @@ public class IssueYdbRepository {
         // Этот режим сообщает серверу, что это транзакция только для чтения.
         // Это позволяет снизить накладные расходы на подготовку к изменениям и просто читать данные из 
         // одного снимка базы данных.
-        var resultSet = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(
-                        session.createQuery("SELECT id, title, created_at FROM issues;", TxMode.SNAPSHOT_RO)
-                )
-        ).join().getValue();
+        var resultSet = queryServiceHelper.executeQuery("SELECT id, title, created_at FROM issues;",
+                TxMode.SNAPSHOT_RO, Params.empty());
 
         var resultSetReader = resultSet.getResultSet(0);
 

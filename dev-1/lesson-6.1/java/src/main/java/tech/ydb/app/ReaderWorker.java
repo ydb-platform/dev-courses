@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.ydb.topic.TopicClient;
@@ -20,7 +19,6 @@ public class ReaderWorker {
     private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
 
     private final SyncReader reader;
-    private final AtomicBoolean stoppedProcess = new AtomicBoolean();
 
     private volatile CompletableFuture<Void> readerJob;
 
@@ -42,7 +40,7 @@ public class ReaderWorker {
                 () -> {
                     LOGGER.info("Started read worker!");
 
-                    while (!stoppedProcess.get()) {
+                    while (true) {
                         try {
                             // Читаем сообщение с таймаутом в 1 секунду.
                             // Если за 1 секунду сообщение не будет получено, метод вернет null
@@ -56,6 +54,10 @@ public class ReaderWorker {
 
                             // Выводим полученное сообщение
                             LOGGER.info("Received message: {}", new String(message.getData()));
+
+                            if (message.getSeqNo() == 6) {
+                                break; // в примере мы вычитываем 6 обновлений
+                            }
                         } catch (Exception e) {
                             // Ignored
                         }
@@ -67,8 +69,7 @@ public class ReaderWorker {
     }
 
     public void shutdown() {
-        // Устанавливаем флаг остановки и ждем завершения чтения событий
-        stoppedProcess.set(true);
         readerJob.join();
+        reader.shutdown();
     }
 }

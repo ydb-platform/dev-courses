@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -317,7 +316,7 @@ public class IssueYdbRepository {
                         session.createQuery(
                                 """
                                         DECLARE $author AS Text;
-                                        SELECT id, title, created_at, author, COALESCE(link_count, 0), status FROM issues VIEW authorIndex
+                                        SELECT id, title, created_at, author, COALESCE(link_count, 0), status FROM issues
                                         WHERE author = $author;
                                         """,
                                 TxMode.SNAPSHOT_RO,
