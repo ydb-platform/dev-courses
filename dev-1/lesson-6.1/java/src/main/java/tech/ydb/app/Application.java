@@ -18,7 +18,7 @@ public class Application {
     private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
                 .withConnectTimeout(Duration.ofSeconds(10))
@@ -63,9 +63,6 @@ public class Application {
             for (var issue : allIssues) {
                 updateService.update(issue.id(), "IN_PROGRESS");
             }
-
-            // Ждем обработки всех сообщений
-            Thread.sleep(5_000);
 
             // Корректно завершаем работу сервисов
             updateService.shutdown();

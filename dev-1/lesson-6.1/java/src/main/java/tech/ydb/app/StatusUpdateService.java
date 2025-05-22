@@ -39,6 +39,7 @@ public class StatusUpdateService {
                 .setData(("[" + id + " : " + status + "]").getBytes(StandardCharsets.UTF_8))
                 .build()
         );
+        writer.flush(); // ждем отправки
     }
 
     public void shutdown() {

@@ -22,9 +22,11 @@ import tech.ydb.table.values.StructType;
  */
 public class IssueYdbRepository {
     private final SessionRetryContext retryCtx;
+    private final QueryServiceHelper queryServiceHelper;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
         this.retryCtx = retryCtx;
+        this.queryServiceHelper = new QueryServiceHelper(retryCtx);
     }
 
     /**
@@ -36,14 +38,14 @@ public class IssueYdbRepository {
         var idsParams = Params.of("$ids", ListType.of(structType).newValue(
                 ids.stream().map(id -> structType.newValue("id", PrimitiveValue.newInt64(id))).toList())
         );
-        var queryReader = retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery("""
-                                DECLARE $ids AS List<Struct<id: Int64>>;
-                                SELECT id, title, created_at, author, link_count, status
-                                FROM issues WHERE id IN (SELECT id FROM AS_TABLE($ids));
-                                """,
-                        TxMode.SERIALIZABLE_RW, idsParams)
-        )).join().getValue();
+        var queryReader = queryServiceHelper.executeQuery("""
+                        DECLARE $ids AS List<Struct<id: Int64>>;
+                        SELECT id, title, created_at, author, link_count, status
+                        FROM issues WHERE id IN (SELECT id FROM AS_TABLE($ids));
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                idsParams
+        );
 
         return fetchIssues(queryReader);
     }
@@ -70,62 +72,53 @@ public class IssueYdbRepository {
                 )).toList()
         ));
 
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                DECLARE $args AS List<Struct<
-                                id: Int64,
-                                title: Text,
-                                author: Text?, -- тут знак вопроса означает, что в Timestamp может быть передан NULL
-                                created_at: Timestamp,
-                                >>;
+        queryServiceHelper.executeQuery("""
+                        DECLARE $args AS List<Struct<
+                        id: Int64,
+                        title: Text,
+                        author: Text?, -- тут знак вопроса означает, что в Timestamp может быть передан NULL
+                        created_at: Timestamp,
+                        >>;
 
-                                UPSERT INTO issues
-                                SELECT * FROM AS_TABLE($args);
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        listIssues
-                ).execute()
-        ).join().getStatus().expectSuccess("Failed upsert title");
+                        UPSERT INTO issues
+                        SELECT * FROM AS_TABLE($args);
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                listIssues
+        );
     }
 
     public void updateStatus(long id, String status) {
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                DECLARE $id AS Int64;
-                                DECLARE $new_status AS Text;
-                                                                    
-                                UPDATE issues SET status = $new_status WHERE id = $id;
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of("$id", PrimitiveValue.newInt64(id),
-                                "$new_status", PrimitiveValue.newText(status))
-                ).execute()
-        ).join().getStatus().expectSuccess();
+        queryServiceHelper.executeQuery("""
+                        DECLARE $id AS Int64;
+                        DECLARE $new_status AS Text;
+                                                            
+                        UPDATE issues SET status = $new_status WHERE id = $id;
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of("$id", PrimitiveValue.newInt64(id),
+                        "$new_status", PrimitiveValue.newText(status))
+        );
     }
 
     public List<IssueLinkCount> linkTicketsNoInteractive(long idT1, long idT2) {
-        var valueReader = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(session.createQuery(
-                        """
-                                DECLARE $t1 AS Int64;
-                                DECLARE $t2 AS Int64;
-                                                                    
-                                UPDATE issues
-                                SET link_count = COALESCE(link_count, 0) + 1
-                                WHERE id IN ($t1, $t2);
-                                                                    
-                                INSERT INTO links (source, destination)
-                                VALUES ($t1, $t2), ($t2, $t1);
+        var valueReader = queryServiceHelper.executeQuery("""
+                        DECLARE $t1 AS Int64;
+                        DECLARE $t2 AS Int64;
+                                                            
+                        UPDATE issues
+                        SET link_count = COALESCE(link_count, 0) + 1
+                        WHERE id IN ($t1, $t2);
+                                                            
+                        INSERT INTO links (source, destination)
+                        VALUES ($t1, $t2), ($t2, $t1);
 
-                                SELECT id, link_count FROM issues
-                                WHERE id IN ($t1, $t2)
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
-                ))
-        ).join().getValue();
+                        SELECT id, link_count FROM issues
+                        WHERE id IN ($t1, $t2)
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
+        );
 
         return getIssueLinkCount(valueReader);
     }
@@ -133,9 +126,9 @@ public class IssueYdbRepository {
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
         return retryCtx.supplyResult(
                 session -> {
-                    var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    var tx = new TransactionHelper(session.createNewTransaction(TxMode.SERIALIZABLE_RW));
 
-                    tx.createQuery("""
+                    tx.executeQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
                                                                  
@@ -144,9 +137,9 @@ public class IssueYdbRepository {
                                     WHERE id IN ($t1, $t2);
                                     """,
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
-                    ).execute().join().getStatus().expectSuccess();
+                    );
 
-                    tx.createQuery("""
+                    tx.executeQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
                                                                         
@@ -154,18 +147,17 @@ public class IssueYdbRepository {
                                     VALUES ($t1, $t2), ($t2, $t1);
                                     """,
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
-                    ).execute().join().getStatus().expectSuccess();
+                    );
 
-                    var valueReader = QueryReader.readFrom(
-                            tx.createQueryWithCommit("""
-                                            DECLARE $t1 AS Int64;
-                                            DECLARE $t2 AS Int64;
-                                                                                
-                                            SELECT id, link_count FROM issues
-                                            WHERE id IN ($t1, $t2)
-                                            """,
-                                    Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2)))
-                    ).join().getValue();
+                    var valueReader = tx.executeQueryWithCommit("""
+                                    DECLARE $t1 AS Int64;
+                                    DECLARE $t2 AS Int64;
+                                                                        
+                                    SELECT id, link_count FROM issues
+                                    WHERE id IN ($t1, $t2)
+                                    """,
+                            Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
+                    );
 
                     var linkTicketPairs = getIssueLinkCount(valueReader);
 
@@ -178,33 +170,30 @@ public class IssueYdbRepository {
         var id = ThreadLocalRandom.current().nextLong();
         var now = Instant.now();
 
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                DECLARE $id AS Int64;
-                                DECLARE $title AS Text;
-                                DECLARE $created_at AS Timestamp;
-                                DECLARE $author AS Text;
-                                UPSERT INTO issues (id, title, created_at, author)
-                                VALUES ($id, $title, $created_at, $author);
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of(
-                                "$id", PrimitiveValue.newInt64(id),
-                                "$title", PrimitiveValue.newText(title),
-                                "$created_at", PrimitiveValue.newTimestamp(now),
-                                "$author", PrimitiveValue.newText(author)
-                        )
-                ).execute()
-        ).join().getStatus().expectSuccess("Failed upsert title");
+        queryServiceHelper.executeQuery(
+                """
+                        DECLARE $id AS Int64;
+                        DECLARE $title AS Text;
+                        DECLARE $created_at AS Timestamp;
+                        DECLARE $author AS Text;
+                        UPSERT INTO issues (id, title, created_at, author)
+                        VALUES ($id, $title, $created_at, $author);
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of(
+                        "$id", PrimitiveValue.newInt64(id),
+                        "$title", PrimitiveValue.newText(title),
+                        "$created_at", PrimitiveValue.newTimestamp(now),
+                        "$author", PrimitiveValue.newText(author)
+                )
+        );
     }
 
     public List<Issue> findAll() {
-        var resultSet = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(
-                        session.createQuery("SELECT id, title, created_at, author, COALESCE(link_count, 0), status FROM issues;", TxMode.SNAPSHOT_RO)
-                )
-        ).join().getValue();
+        var resultSet = queryServiceHelper.executeQuery(
+                "SELECT id, title, created_at, author, COALESCE(link_count, 0), status FROM issues;",
+                TxMode.SNAPSHOT_RO, Params.empty()
+        );
 
         return fetchIssues(resultSet);
     }
@@ -214,27 +203,25 @@ public class IssueYdbRepository {
      * С реализацией логики на YQL
      */
     public List<IssueTitle> findFutures() {
-        var queryReader = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(
-                        session.createQuery("""
-                                -- выбираем ID и заголовки задач, которые должны быть созданы в будущем
-                                $future =
-                                SELECT id, title
-                                FROM issues
-                                WHERE status = 'future';
-                                                                
-                                -- возвращаем их как результат запроса
-                                SELECT * FROM $future;
-                                                                
-                                -- и обновляем статус/время точно у этих же задач
-                                UPDATE issues ON
-                                                                
-                                SELECT id, CurrentUtcTimestamp() AS created_at, CAST('new' AS Utf8) AS status
-                                                                
-                                FROM $future
-                                """, TxMode.SERIALIZABLE_RW)
-                )
-        ).join().getValue();
+        var queryReader = queryServiceHelper.executeQuery("""
+                        -- выбираем ID и заголовки задач, которые должны быть созданы в будущем
+                        $future =
+                        SELECT id, title
+                        FROM issues
+                        WHERE status = 'future';
+                                                        
+                        -- возвращаем их как результат запроса
+                        SELECT * FROM $future;
+                                                        
+                        -- и обновляем статус/время точно у этих же задач
+                        UPDATE issues ON
+                                                        
+                        SELECT id, CurrentUtcTimestamp() AS created_at, CAST('new' AS Utf8) AS status
+                                                        
+                        FROM $future
+                        """,
+                TxMode.SERIALIZABLE_RW, Params.empty()
+        );
 
         var linkTicketPairs = new ArrayList<IssueTitle>();
         var resultSet = queryReader.getResultSet(0);
@@ -255,91 +242,83 @@ public class IssueYdbRepository {
                 ids.stream().map(PrimitiveValue::newInt64).toList()
         );
 
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                -- принимаем id задач для удаления
-                                DECLARE $issues_ids_arg AS List<Int64>;
+        queryServiceHelper.executeQuery("""
+                        -- принимаем id задач для удаления
+                        DECLARE $issues_ids_arg AS List<Int64>;
 
-                                -- это лямбда-функция для преобразования отдельного элемента списка в структуру
-                                $list_to_id_struct = ($id) -> { RETURN <|id:$id|>};
+                        -- это лямбда-функция для преобразования отдельного элемента списка в структуру
+                        $list_to_id_struct = ($id) -> { RETURN <|id:$id|>};
 
-                                -- тут удаляем из списка возможные дубли и преобразовываем список id в список структур
-                                $issue_ids_list = ListMap(ListUniq($issues_ids_arg), $list_to_id_struct);
+                        -- тут удаляем из списка возможные дубли и преобразовываем список id в список структур
+                        $issue_ids_list = ListMap(ListUniq($issues_ids_arg), $list_to_id_struct);
 
-                                -- внутри других запросов проще работать с результатом запроса к таблице,
-                                -- чтобы не помнить везде о том что это когда-то было списком структур или
-                                -- параметром
-                                $issues = SELECT id FROM AS_TABLE($issue_ids_list);
+                        -- внутри других запросов проще работать с результатом запроса к таблице,
+                        -- чтобы не помнить везде о том что это когда-то было списком структур или
+                        -- параметром
+                        $issues = SELECT id FROM AS_TABLE($issue_ids_list);
 
 
-                                -- выбираем связи этих задач
-                                $linked_issues =
-                                SELECT source, destination
+                        -- выбираем связи этих задач
+                        $linked_issues =
+                        SELECT source, destination
 
-                                FROM links
+                        FROM links
 
-                                WHERE source IN $issues;
-
-
-                                -- и связи в обратную сторону
-                                $linked_issues_mirrored =
-                                SELECT destination AS source, source AS destination
-                                FROM $linked_issues;
+                        WHERE source IN $issues;
 
 
-                                $mirrored_dec_map =
-                                SELECT source AS id, COUNT(*) AS cnt
-                                FROM $linked_issues_mirrored
-
-                                GROUP BY source;
-
-
-                                -- именованные выражения это просто подстановка запросов, т.е. промежуточного сохранения данных не происходит
-                                -- поэтому важно выполнять запросы в таком порядке, чтобы данные, на которые опирается выражение ещё не были испорчены
-                                -- к моменту его выполнения, проще всего идти с конца
-
-                                -- сначала обновляем счётчики у связанных тикетов
-                                UPDATE issues ON
-
-                                SELECT i.id AS id, i.link_count - d.cnt AS link_count
-
-                                FROM $mirrored_dec_map AS d JOIN issues AS i ON d.id = i.id;
+                        -- и связи в обратную сторону
+                        $linked_issues_mirrored =
+                        SELECT destination AS source, source AS destination
+                        FROM $linked_issues;
 
 
-                                -- теперь обновляем счётчики у переданных тикетов
-                                UPDATE issues
-                                SET link_count=link_count-1
+                        $mirrored_dec_map =
+                        SELECT source AS id, COUNT(*) AS cnt
+                        FROM $linked_issues_mirrored
 
-                                WHERE id IN $issues;
+                        GROUP BY source;
 
 
-                                -- и удаляем сами тикеты
-                                -- если тикеты удалить раньше, то
-                                DELETE FROM issues
+                        -- именованные выражения это просто подстановка запросов, т.е. промежуточного сохранения данных не происходит
+                        -- поэтому важно выполнять запросы в таком порядке, чтобы данные, на которые опирается выражение ещё не были испорчены
+                        -- к моменту его выполнения, проще всего идти с конца
 
-                                WHERE id IN $issues;
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of("$issues_ids_arg", idsParam)
-                ).execute()
-        ).join().getStatus().expectSuccess("Failed upsert title");
+                        -- сначала обновляем счётчики у связанных тикетов
+                        UPDATE issues ON
+
+                        SELECT i.id AS id, i.link_count - d.cnt AS link_count
+
+                        FROM $mirrored_dec_map AS d JOIN issues AS i ON d.id = i.id;
+
+
+                        -- теперь обновляем счётчики у переданных тикетов
+                        UPDATE issues
+                        SET link_count=link_count-1
+
+                        WHERE id IN $issues;
+
+
+                        -- и удаляем сами тикеты
+                        -- если тикеты удалить раньше, то
+                        DELETE FROM issues
+
+                        WHERE id IN $issues;
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of("$issues_ids_arg", idsParam)
+        );
     }
 
     public Issue findByAuthor(String author) {
-        var resultSet = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(
-                        session.createQuery(
-                                """
-                                        DECLARE $author AS Text;
-                                        SELECT id, title, created_at, author, COALESCE(link_count, 0), status FROM issues VIEW authorIndex
-                                        WHERE author = $author;
-                                        """,
-                                TxMode.SNAPSHOT_RO,
-                                Params.of("$author", PrimitiveValue.newText(author))
-                        )
-                )
-        ).join().getValue();
+        var resultSet = queryServiceHelper.executeQuery("""
+                        DECLARE $author AS Text;
+                        SELECT id, title, created_at, author, COALESCE(link_count, 0), status FROM issues
+                        WHERE author = $author;
+                        """,
+                TxMode.SNAPSHOT_RO,
+                Params.of("$author", PrimitiveValue.newText(author))
+        );
 
         var resultSetReader = resultSet.getResultSet(0);
         resultSetReader.next();

@@ -18,7 +18,7 @@ public class Application {
     private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
                 .withConnectTimeout(Duration.ofSeconds(10))
@@ -51,13 +51,7 @@ public class Application {
 
             // Запускаем воркер для чтения изменений из changefeed
             var readerWorker = new ReaderChangefeedWorker(topicClient);
-            readerWorker.run();
-
-            // Ждем обработки всех изменений
-            Thread.sleep(10_000);
-
-            // Завершаем работу воркера
-            readerWorker.shutdown();
+            readerWorker.readChangefeed();
 
             LOGGER.info("Print all tickets: ");
             for (var issue : issueYdbRepository.findAll()) {

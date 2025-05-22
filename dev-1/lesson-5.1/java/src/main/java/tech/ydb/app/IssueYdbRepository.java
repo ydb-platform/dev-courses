@@ -20,9 +20,11 @@ import tech.ydb.table.values.PrimitiveValue;
  */
 public class IssueYdbRepository {
     private final SessionRetryContext retryCtx;
+    private final QueryServiceHelper queryServiceHelper;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
         this.retryCtx = retryCtx;
+        this.queryServiceHelper = new QueryServiceHelper(retryCtx);
     }
 
     /**
@@ -31,26 +33,23 @@ public class IssueYdbRepository {
      * выполняются в одной транзакции
      */
     public List<IssueLinkCount> linkTicketsNoInteractive(long idT1, long idT2) {
-        var valueReader = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(session.createQuery(
-                        """
-                                DECLARE $t1 AS Int64;
-                                DECLARE $t2 AS Int64;
-                                                                    
-                                UPDATE issues
-                                SET link_count = COALESCE(link_count, 0) + 1
-                                WHERE id IN ($t1, $t2);
-                                                                    
-                                INSERT INTO links (source, destination)
-                                VALUES ($t1, $t2), ($t2, $t1);
+        var valueReader = queryServiceHelper.executeQuery("""
+                        DECLARE $t1 AS Int64;
+                        DECLARE $t2 AS Int64;
+                                                            
+                        UPDATE issues
+                        SET link_count = COALESCE(link_count, 0) + 1
+                        WHERE id IN ($t1, $t2);
+                                                            
+                        INSERT INTO links (source, destination)
+                        VALUES ($t1, $t2), ($t2, $t1);
 
-                                SELECT id, link_count FROM issues
-                                WHERE id IN ($t1, $t2)
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
-                ))
-        ).join().getValue();
+                        SELECT id, link_count FROM issues
+                        WHERE id IN ($t1, $t2)
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
+        );
 
         return getLinkTicketPairs(valueReader);
     }
@@ -61,9 +60,9 @@ public class IssueYdbRepository {
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
         return retryCtx.supplyResult(
                 session -> {
-                    var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    var tx = new TransactionHelper(session.createNewTransaction(TxMode.SERIALIZABLE_RW));
 
-                    tx.createQuery("""
+                    tx.executeQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
                                                                  
@@ -72,9 +71,9 @@ public class IssueYdbRepository {
                                     WHERE id IN ($t1, $t2);
                                     """,
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
-                    ).execute().join().getStatus().expectSuccess();
+                    );
 
-                    tx.createQuery("""
+                    tx.executeQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
                                                                         
@@ -82,18 +81,17 @@ public class IssueYdbRepository {
                                     VALUES ($t1, $t2), ($t2, $t1);
                                     """,
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
-                    ).execute().join().getStatus().expectSuccess();
+                    );
 
-                    var valueReader = QueryReader.readFrom(
-                            tx.createQueryWithCommit("""
-                                            DECLARE $t1 AS Int64;
-                                            DECLARE $t2 AS Int64;
-                                                                                
-                                            SELECT id, link_count FROM issues
-                                            WHERE id IN ($t1, $t2)
-                                            """,
-                                    Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2)))
-                    ).join().getValue();
+                    var valueReader = tx.executeQueryWithCommit("""
+                                    DECLARE $t1 AS Int64;
+                                    DECLARE $t2 AS Int64;
+                                                                        
+                                    SELECT id, link_count FROM issues
+                                    WHERE id IN ($t1, $t2)
+                                    """,
+                            Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
+                    );
 
                     var linkTicketPairs = getLinkTicketPairs(valueReader);
 
@@ -112,25 +110,22 @@ public class IssueYdbRepository {
         var id = ThreadLocalRandom.current().nextLong();
         var now = Instant.now();
 
-        retryCtx.supplyResult(
-                session -> session.createQuery(
-                        """
-                                DECLARE $id AS Int64;
-                                DECLARE $title AS Text;
-                                DECLARE $created_at AS Timestamp;
-                                DECLARE $author AS Text;
-                                UPSERT INTO issues (id, title, created_at, author)
-                                VALUES ($id, $title, $created_at, $author);
-                                """,
-                        TxMode.SERIALIZABLE_RW,
-                        Params.of(
-                                "$id", PrimitiveValue.newInt64(id),
-                                "$title", PrimitiveValue.newText(title),
-                                "$created_at", PrimitiveValue.newTimestamp(now),
-                                "$author", PrimitiveValue.newText(author)
-                        )
-                ).execute()
-        ).join().getStatus().expectSuccess("Failed upsert title");
+        queryServiceHelper.executeQuery("""
+                        DECLARE $id AS Int64;
+                        DECLARE $title AS Text;
+                        DECLARE $created_at AS Timestamp;
+                        DECLARE $author AS Text;
+                        UPSERT INTO issues (id, title, created_at, author)
+                        VALUES ($id, $title, $created_at, $author);
+                        """,
+                TxMode.SERIALIZABLE_RW,
+                Params.of(
+                        "$id", PrimitiveValue.newInt64(id),
+                        "$title", PrimitiveValue.newText(title),
+                        "$created_at", PrimitiveValue.newTimestamp(now),
+                        "$author", PrimitiveValue.newText(author)
+                )
+        );
     }
 
     /**
@@ -140,11 +135,11 @@ public class IssueYdbRepository {
      */
     public List<Issue> findAll() {
         var titles = new ArrayList<Issue>();
-        var resultSet = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(
-                        session.createQuery("SELECT id, title, created_at, author, COALESCE(link_count, 0) FROM issues;", TxMode.SNAPSHOT_RO)
-                )
-        ).join().getValue();
+        var resultSet = queryServiceHelper.executeQuery(
+                "SELECT id, title, created_at, author, COALESCE(link_count, 0) FROM issues;",
+                TxMode.SNAPSHOT_RO,
+                Params.empty()
+        );
 
         var resultSetReader = resultSet.getResultSet(0);
 
@@ -168,20 +163,15 @@ public class IssueYdbRepository {
      * @return найденный тикет
      */
     public Issue findByAuthor(String author) {
-        var resultSet = retryCtx.supplyResult(
-                session -> QueryReader.readFrom(
-                        session.createQuery(
-                                """
-                                        DECLARE $author AS Text;
-                                        SELECT id, title, created_at, author, COALESCE(link_count, 0)
-                                        FROM issues VIEW authorIndex -- секция VIEW указывает на вторичный индекс
-                                        WHERE author = $author;
-                                        """,
-                                TxMode.SNAPSHOT_RO,
-                                Params.of("$author", PrimitiveValue.newText(author))
-                        )
-                )
-        ).join().getValue();
+        var resultSet = queryServiceHelper.executeQuery("""
+                        DECLARE $author AS Text;
+                        SELECT id, title, created_at, author, COALESCE(link_count, 0)
+                        FROM issues
+                        WHERE author = $author;
+                        """,
+                TxMode.SNAPSHOT_RO,
+                Params.of("$author", PrimitiveValue.newText(author))
+        );
 
         var resultSetReader = resultSet.getResultSet(0);
         resultSetReader.next();

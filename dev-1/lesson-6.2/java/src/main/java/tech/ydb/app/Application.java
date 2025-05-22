@@ -7,7 +7,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -36,10 +38,10 @@ import tech.ydb.topic.write.Message;
 public class Application {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
-    private static final String PATH = "/dev-1/lesson-6.2/java/file.txt";
+    private static final String PATH = "/lesson-6.2/java/file.txt";
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws IOException, InterruptedException, ExecutionException, TimeoutException {
         try (GrpcTransport grpcTransport = GrpcTransport
                 .forConnectionString(CONNECTION_STRING)
                 .withConnectTimeout(Duration.ofSeconds(10))
@@ -49,9 +51,10 @@ public class Application {
         ) {
 
             var retryCtx = SessionRetryContext.create(queryClient).build();
+            var queryServiceHelper = new QueryServiceHelper(retryCtx);
 
-            dropSchema(retryCtx);
-            createSchema(retryCtx);
+            dropSchema(queryServiceHelper);
+            createSchema(queryServiceHelper);
 
             // Создаем writer для отправки строк файла в топик
             var writer = topicClient.createSyncWriter(
@@ -72,112 +75,104 @@ public class Application {
             writer.init();
             reader.init();
 
-            var stopped_read_process = new AtomicBoolean();
-
-            // Запускаем фоновое чтение строк из топика
-            var readerJob = CompletableFuture.runAsync(() -> runReadJob(stopped_read_process, reader, retryCtx));
-
             String currentDirectory = System.getProperty("user.dir");
             var pathFile = Path.of(currentDirectory, PATH);
 
-            try (var lines = Files.lines(pathFile)) {
-                // Получаем номер последней обработанной строки из таблицы прогресса
-                var queryReader = retryCtx.supplyResult(
-                        session -> QueryReader.readFrom(session.createQuery("""
-                                        DECLARE $name AS Text;
-                                        SELECT line_num FROM write_file_progress
-                                        WHERE name = $name;
-                                        """,
-                                TxMode.SERIALIZABLE_RW,
-                                Params.of("$name", PrimitiveValue.newText(pathFile.toString())))
-                        )).join().getValue();
+            var lines = Files.readAllLines(pathFile);
 
-                var resultSet = queryReader.getResultSet(0);
+            // Запускаем фоновое чтение строк из топика
+            var readerJob = CompletableFuture.runAsync(() -> runReadJob(lines.size(), reader, retryCtx));
 
-                long lineNumberLong = 1;
-                if (resultSet.next()) {
-                    lineNumberLong = resultSet.getColumn(0).getInt64();
-                }
+            // Получаем номер последней обработанной строки из таблицы прогресса
+            var queryReader = queryServiceHelper.executeQuery("""
+                            DECLARE $name AS Text;
+                            SELECT line_num FROM write_file_progress
+                            WHERE name = $name;
+                            """,
+                    TxMode.SERIALIZABLE_RW,
+                    Params.of("$name", PrimitiveValue.newText(pathFile.toString()))
+            );
 
-                var lineNumber = new AtomicLong(lineNumberLong);
-                var origLineNumber = new AtomicLong(1);
+            var resultSet = queryReader.getResultSet(0);
 
-                // Читаем файл построчно и отправляем в топик длину каждой строки
-                lines.forEach(line ->
-                        {
-                            if (origLineNumber.getAndIncrement() < lineNumber.get()) {
-                                return;
-                            }
-
-                            // Порядковый номер строки файла используется в качестве 
-                            // порядкового номера сообщения внутри Producer'а
-                            // таким образом при перезапуске процесса сообщения будут повторяться 
-                            // так, что сервер сможет правильно пропустить дубли.
-                            writer.send(Message.newBuilder()
-                                    .setSeqNo(lineNumber.getAndIncrement())
-                                    .setData((PATH + ":" + line).getBytes(StandardCharsets.UTF_8))
-                                    .build()
-                            );
-                            writer.flush();
-
-                            // Сохраняем прогресс обработки файла в таблицу, чтобы 
-                            // не повторять работу при перезапусках
-                            retryCtx.supplyResult(
-                                    session -> session.createQuery("""
-                                                    DECLARE $name AS Text;
-                                                    DECLARE $line_num AS Int64;
-                                                                                            
-                                                    UPSERT INTO write_file_progress(name, line_num) VALUES ($name, $line_num);
-                                                    """,
-                                            TxMode.SERIALIZABLE_RW,
-                                            Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
-                                                    "$line_num", PrimitiveValue.newInt64(lineNumber.get()))
-                                    ).execute()
-                            ).join().getStatus().expectSuccess();
-                        }
-                );
+            long lineNumberLong = 1;
+            if (resultSet.next()) {
+                lineNumberLong = resultSet.getColumn(0).getInt64();
             }
 
-            // Ждем обработки всех строк и завершаем работу
-            Thread.sleep(5_000);
-            stopped_read_process.set(true);
-            printTableFile(retryCtx);
+            var lineNumber = new AtomicLong(lineNumberLong);
+            var origLineNumber = new AtomicLong(1);
+
+            // Читаем файл построчно и отправляем в топик длину каждой строки
+            lines.forEach(line ->
+                    {
+                        if (origLineNumber.getAndIncrement() < lineNumber.get()) {
+                            return;
+                        }
+
+                        // Порядковый номер строки файла используется в качестве
+                        // порядкового номера сообщения внутри Producer'а
+                        // таким образом при перезапуске процесса сообщения будут повторяться
+                        // так, что сервер сможет правильно пропустить дубли.
+                        writer.send(Message.newBuilder()
+                                .setSeqNo(lineNumber.getAndIncrement())
+                                .setData((PATH + ":" + line).getBytes(StandardCharsets.UTF_8))
+                                .build()
+                        );
+                        writer.flush();
+
+                        // Сохраняем прогресс обработки файла в таблицу, чтобы
+                        // не повторять работу при перезапусках
+                        queryServiceHelper.executeQuery("""
+                                        DECLARE $name AS Text;
+                                        DECLARE $line_num AS Int64;
+                                                                                
+                                        UPSERT INTO write_file_progress(name, line_num) VALUES ($name, $line_num);
+                                        """,
+                                TxMode.SERIALIZABLE_RW,
+                                Params.of("$name", PrimitiveValue.newText(pathFile.toString()),
+                                        "$line_num", PrimitiveValue.newInt64(lineNumber.get()))
+                        );
+                    }
+            );
+
 
             readerJob.join();
+            printTableFile(queryServiceHelper);
+
+            writer.shutdown(10, TimeUnit.SECONDS);
+            reader.shutdown();
         }
     }
 
-    private static void runReadJob(AtomicBoolean stopped_read_process, SyncReader reader, SessionRetryContext retryCtx) {
+    private static void runReadJob(int linesCount, SyncReader reader, SessionRetryContext retryCtx) {
         LOGGER.info("Started read worker!");
 
-        while (!stopped_read_process.get()) {
+        for (int i = 0; i < linesCount; i++) {
             try {
-                var message = reader.receive(1, TimeUnit.SECONDS);
+                var message = reader.receive(10, TimeUnit.SECONDS);
 
-                if (message == null) {
-                    continue;
-                }
-
-                // Далее идёт пример обработки сообщения из топика ровно 1 раз без использования 
-                // транзакций для объединения операции с таблицами и топиками - т.е. то, как это 
+                // Далее идёт пример обработки сообщения из топика ровно 1 раз без использования
+                // транзакций для объединения операции с таблицами и топиками - т.е. то, как это
                 // делается в других системах, когда нет готовых интеграций.
 
                 // В транзакции будет проверяться было ли уже обработано сообщение и если нет, то
                 // обрабатывать и сохранять прогресс. Эти операции должны быть атомарными, чтобы
                 // избежать ситуации, когда одно и тоже сообщение будет обработано несколько раз.
                 retryCtx.supplyStatus(session -> {
-                    var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    var curTx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    var tx = new TransactionHelper(curTx);
+                    assert message != null;
                     var partitionId = message.getPartitionSession().getPartitionId();
 
                     // Проверяем, не обрабатывали ли мы уже это сообщение
-                    var queryReader = QueryReader.readFrom(
-                            tx.createQuery("""
-                                                DECLARE $partition_id AS Int64;
-                                                SELECT last_offset FROM file_progress
-                                                WHERE partition_id = $partition_id;
-                                            """,
-                                    Params.of("$partition_id", PrimitiveValue.newInt64(partitionId)))
-                    ).join().getValue();
+                    var queryReader = tx.executeQuery("""
+                                        DECLARE $partition_id AS Int64;
+                                        SELECT last_offset FROM file_progress
+                                        WHERE partition_id = $partition_id;
+                                    """,
+                            Params.of("$partition_id", PrimitiveValue.newInt64(partitionId))
+                    );
 
                     var resultSet = queryReader.getResultSet(0);
                     var lastOffset = resultSet.next() ? resultSet.getColumn(0).getInt64() : 0;
@@ -185,7 +180,7 @@ public class Application {
                     // Если сообщение уже было обработано, пропускаем его
                     if (lastOffset > message.getOffset()) {
                         message.commit().join();
-                        tx.rollback().join();
+                        curTx.rollback().join();
 
                         return CompletableFuture.completedFuture(Status.SUCCESS);
                     }
@@ -196,8 +191,7 @@ public class Application {
                     var lineNumber = message.getSeqNo();
 
                     // Сохраняем информацию о строке в таблицу
-                    tx.createQuery(
-                            """
+                    tx.executeQuery("""
                                         DECLARE $name AS Text;
                                         DECLARE $line AS Int64;
                                         DECLARE $length AS Int64;
@@ -208,13 +202,12 @@ public class Application {
                                     "$line", PrimitiveValue.newInt64(lineNumber),
                                     "$length", PrimitiveValue.newInt64(length)
                             )
-                    ).execute().join().getStatus().expectSuccess();
+                    );
 
-                    // Обновляем прогресс обработки партиции. Если произойдёт сбой после коммита транзакции, 
+                    // Обновляем прогресс обработки партиции. Если произойдёт сбой после коммита транзакции,
                     // но до коммита сообщения в топик, то на основе этого прогресса повторная обработка
                     // сообщения будет пропущена.
-                    tx.createQueryWithCommit(
-                            """
+                    tx.executeQueryWithCommit("""
                                         DECLARE $partition_id AS Int64;
                                         DECLARE $last_offset AS Int64;
                                         UPSERT INTO file_progress(partition_id, last_offset) VALUES ($partition_id, $last_offset);
@@ -223,7 +216,7 @@ public class Application {
                                     "$partition_id", PrimitiveValue.newInt64(partitionId),
                                     "$last_offset", PrimitiveValue.newInt64(lastOffset)
                             )
-                    ).execute().join().getStatus().expectSuccess();
+                    );
 
                     message.commit().join();
 
@@ -238,11 +231,10 @@ public class Application {
         LOGGER.info("Stopped read worker!");
     }
 
-    private static void printTableFile(SessionRetryContext retryCtx) {
+    private static void printTableFile(QueryServiceHelper queryServiceHelper) {
         // Выводим информацию об обработанных строках
-        var queryReader = retryCtx.supplyResult(session ->
-                QueryReader.readFrom(session.createQuery("SELECT name, line, length FROM file;", TxMode.SERIALIZABLE_RW))
-        ).join().getValue();
+        var queryReader = queryServiceHelper.executeQuery(
+                "SELECT name, line, length FROM file;", TxMode.SERIALIZABLE_RW, Params.empty());
 
         for (ResultSetReader resultSet : queryReader) {
             while (resultSet.next()) {
@@ -255,9 +247,9 @@ public class Application {
         }
     }
 
-    private static void createSchema(SessionRetryContext retryCtx) {
+    private static void createSchema(QueryServiceHelper queryServiceHelper) {
         // Создаем таблицы для хранения информации о файле и прогрессе обработки
-        executeSchema(retryCtx, """
+        queryServiceHelper.executeQuery("""
                 CREATE TABLE IF NOT EXISTS file (
                     name Text NOT NULL,
                     line Int64 NOT NULL,
@@ -291,18 +283,13 @@ public class Application {
                 """);
     }
 
-    private static void dropSchema(SessionRetryContext retryCtx) {
-        executeSchema(retryCtx, """
+    private static void dropSchema(QueryServiceHelper queryServiceHelper) {
+        queryServiceHelper.executeQuery("""
                 DROP TABLE IF EXISTS file;
                 DROP TABLE IF EXISTS file_progress;
                 DROP TABLE IF EXISTS write_file_progress;
                 DROP TOPIC IF EXISTS file_topic;
-                """);
-    }
-
-    private static void executeSchema(SessionRetryContext retryCtx, String query) {
-        retryCtx.supplyResult(
-                session -> session.createQuery(query, TxMode.NONE).execute()
-        ).join().getStatus().expectSuccess("Can't create tables");
+                """
+        );
     }
 }

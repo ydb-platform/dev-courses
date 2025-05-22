@@ -15,6 +15,7 @@ import java.time.Duration;
  */
 public class Application {
     private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
+
     // Строка подключения к локальной базе данных YDB
     private static final String CONNECTION_STRING = "grpc://localhost:2136/local";
 

@@ -3,7 +3,6 @@ package tech.ydb.app;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.ydb.topic.TopicClient;
@@ -18,9 +17,6 @@ public class ReaderChangefeedWorker {
     private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
 
     private final SyncReader reader;
-    private final AtomicBoolean stoppedProcess = new AtomicBoolean();
-
-    private volatile CompletableFuture<Void> readerJob;
 
     public ReaderChangefeedWorker(TopicClient topicClient) {
         // Создаем reader для чтения изменений из топика changefeed
@@ -37,12 +33,12 @@ public class ReaderChangefeedWorker {
         reader.init();
     }
 
-    public void run() {
-        readerJob = CompletableFuture.runAsync(
+    public void readChangefeed() {
+        CompletableFuture.runAsync(
                 () -> {
                     LOGGER.info("Started read worker!");
 
-                    while (!stoppedProcess.get()) {
+                    while (true) {
                         try {
                             var message = reader.receive(1, TimeUnit.SECONDS);
 
@@ -51,6 +47,10 @@ public class ReaderChangefeedWorker {
                             }
 
                             LOGGER.info("Received message: {}", new String(message.getData()));
+
+                            if (message.getSeqNo() == 4 /* отслеживаем 4 действия */) {
+                                break;
+                            }
                         } catch (Exception e) {
                             // Ignored
                         }
@@ -58,11 +58,8 @@ public class ReaderChangefeedWorker {
 
                     LOGGER.info("Stopped read worker!");
                 }
-        );
-    }
+        ).join();
 
-    public void shutdown() {
-        stoppedProcess.set(true);
-        readerJob.join();
+        reader.shutdown();
     }
 }
