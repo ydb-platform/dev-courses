@@ -3,11 +3,9 @@ package tech.ydb.app;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
 import tech.ydb.common.transaction.TxMode;
-import tech.ydb.core.Result;
 import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
@@ -21,11 +19,9 @@ import tech.ydb.table.values.PrimitiveValue;
  */
 public class IssueYdbRepository {
 
-    private final SessionRetryContext retryCtx;
     private final QueryServiceHelper queryServiceHelper;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
-        this.retryCtx = retryCtx;
         this.queryServiceHelper = new QueryServiceHelper(retryCtx);
     }
 
@@ -71,11 +67,9 @@ public class IssueYdbRepository {
      * для определения стоит ли продолжать транзакцию и какой запрос выполнить следующим.
      */
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
-        return retryCtx.supplyResult(
-                session -> {
-                    // Транзакция будет изменять данные, поэтому используем режим SERIALIZABLE_RW
-                    var tx = new TransactionHelper(session.createNewTransaction(TxMode.SERIALIZABLE_RW));
-
+        return queryServiceHelper.executeInTx(
+                TxMode.SERIALIZABLE_RW, // Транзакция будет изменять данные, поэтому используем режим SERIALIZABLE_RW
+                tx -> {
                     // Обновляем счетчики связей
                     tx.executeQuery("""
                                     DECLARE $t1 AS Int64;
@@ -110,11 +104,9 @@ public class IssueYdbRepository {
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
                     );
 
-                    var linkTicketPairs = getLinkTicketPairs(valueReader);
-
-                    return CompletableFuture.completedFuture(Result.success(linkTicketPairs));
+                    return getLinkTicketPairs(valueReader);
                 }
-        ).join().getValue();
+        );
     }
 
     /**

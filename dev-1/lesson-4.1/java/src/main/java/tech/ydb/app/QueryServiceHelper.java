@@ -1,6 +1,9 @@
 package tech.ydb.app;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import tech.ydb.common.transaction.TxMode;
+import tech.ydb.core.Result;
 import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
@@ -31,6 +34,18 @@ public class QueryServiceHelper {
     public QueryReader executeQuery(String yql, TxMode txMode, Params params) {
         return retryCtx.supplyResult(
                 session -> QueryReader.readFrom(session.createQuery(yql, txMode, params))
+        ).join().getValue();
+    }
+
+    public <T> T executeInTx(TxMode txMode, Function<TransactionHelper, T> tx) {
+        return retryCtx.supplyResult(
+                session -> {
+                    var transaction = session.createNewTransaction(txMode);
+
+                    return CompletableFuture.completedFuture(
+                            Result.success(tx.apply(new TransactionHelper(transaction)))
+                    );
+                }
         ).join().getValue();
     }
 }

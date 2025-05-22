@@ -17,11 +17,10 @@ import tech.ydb.table.values.PrimitiveValue;
  * @author Kirill Kurdyukov
  */
 public class IssueYdbRepository {
-    private final SessionRetryContext retryCtx;
+
     private final QueryServiceHelper queryServiceHelper;
 
     public IssueYdbRepository(SessionRetryContext retryCtx) {
-        this.retryCtx = retryCtx;
         this.queryServiceHelper = new QueryServiceHelper(retryCtx);
     }
 
@@ -60,10 +59,8 @@ public class IssueYdbRepository {
     }
 
     public List<IssueLinkCount> linkTicketsInteractive(long idT1, long idT2) {
-        return retryCtx.supplyResult(
-                session -> {
-                    var tx = new TransactionHelper(session.createNewTransaction(TxMode.SERIALIZABLE_RW));
-
+        return queryServiceHelper.executeInTx(TxMode.SERIALIZABLE_RW,
+                tx -> {
                     tx.executeQuery("""
                                     DECLARE $t1 AS Int64;
                                     DECLARE $t2 AS Int64;
@@ -95,11 +92,9 @@ public class IssueYdbRepository {
                             Params.of("$t1", PrimitiveValue.newInt64(idT1), "$t2", PrimitiveValue.newInt64(idT2))
                     );
 
-                    var linkTicketPairs = getLinkTicketPairs(valueReader);
-
-                    return CompletableFuture.completedFuture(Result.success(linkTicketPairs));
+                    return getLinkTicketPairs(valueReader);
                 }
-        ).join().getValue();
+        );
     }
 
     public void addIssue(String title, String author) {
