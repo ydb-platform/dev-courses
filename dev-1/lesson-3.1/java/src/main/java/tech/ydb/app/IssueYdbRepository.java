@@ -64,9 +64,9 @@ public class IssueYdbRepository {
     }
 
     /**
-     * Получает по id определенный тикет
+     * Возвращает тикет по заданному id
      *
-     * @return возвращает найденный тикет, если такого тикета нет вернем null
+     * @return найденный тикет или null, если тикет с указанным id не найден
      */
     @Nullable
     public Issue findById(long id) {
@@ -74,7 +74,7 @@ public class IssueYdbRepository {
         // Этот режим сообщает серверу, что это транзакция только для чтения.
         // Это позволяет снизить накладные расходы на подготовку к изменениям и просто читать данные из
         // одного снимка базы данных.
-        var resultSet = queryServiceHelper.executeQuery("SELECT id, title, created_at FROM issues WHERE id = $id;",
+        var resultSet = queryServiceHelper.executeQuery("SELECT id, title, created_at FROM issues WHERE id=$id;",
                 TxMode.SNAPSHOT_RO, Params.of("$id", PrimitiveValue.newInt64(id)));
 
         var resultSetReader = resultSet.getResultSet(0);
