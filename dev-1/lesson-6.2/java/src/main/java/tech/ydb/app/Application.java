@@ -10,7 +10,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +17,6 @@ import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
-import tech.ydb.query.tools.QueryReader;
 import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.result.ResultSetReader;
@@ -214,7 +212,7 @@ public class Application {
                                     """,
                             Params.of(
                                     "$partition_id", PrimitiveValue.newInt64(partitionId),
-                                    "$last_offset", PrimitiveValue.newInt64(lastOffset)
+                                    "$last_offset", PrimitiveValue.newInt64(message.getOffset())
                             )
                     );
 
