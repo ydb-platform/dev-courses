@@ -27,7 +27,7 @@ func NewIssueRepository(query *QueryHelper) *IssueRepository {
 	}
 }
 
-func (repo *IssueRepository) AddIssue(title string) (*Issue, error) {
+func (repo *IssueRepository) AddIssue(ctx context.Context, title string) (*Issue, error) {
 	id := random.Int63() // do not repeat in production
 	timestamp := time.Now()
 
@@ -39,6 +39,7 @@ func (repo *IssueRepository) AddIssue(title string) (*Issue, error) {
 		UPSERT INTO issues (id, title, created_at)
 		VALUES ($id, $title, $created_at);
 		`,
+		ctx,
 		query.SerializableReadWriteTxControl(query.CommitTx()),
 		ydb.ParamsBuilder().
 			Param("$id").Int64(id).
@@ -57,7 +58,7 @@ func (repo *IssueRepository) AddIssue(title string) (*Issue, error) {
 	}, nil
 }
 
-func (repo *IssueRepository) FindById(id int64) (*Issue, error) {
+func (repo *IssueRepository) FindById(ctx context.Context, id int64) (*Issue, error) {
 	result := make([]Issue, 0)
 
 	repo.query.Query(`
@@ -68,6 +69,7 @@ func (repo *IssueRepository) FindById(id int64) (*Issue, error) {
 		FROM issues
 		WHERE id=$id;
 		`,
+		ctx,
 		query.SnapshotReadOnlyTxControl(),
 		ydb.ParamsBuilder().
 			Param("$id").Int64(id).
@@ -84,17 +86,17 @@ func (repo *IssueRepository) FindById(id int64) (*Issue, error) {
 			return nil
 		},
 	)
-	
+
 	if len(result) > 1 {
 		return nil, errors.New("Multiple rows with the same id")
 	}
 	if len(result) == 0 {
-		return nil, errors.New("Didnt found any issues (lol)")
+		return nil, errors.New("Did not find any issues (lol)")
 	}
 	return &result[0], nil
 }
 
-func (repo *IssueRepository) FindAll() ([]Issue, error) {
+func (repo *IssueRepository) FindAll(ctx context.Context) ([]Issue, error) {
 	result := make([]Issue, 0)
 
 	err := repo.query.Query(`
@@ -104,16 +106,15 @@ func (repo *IssueRepository) FindAll() ([]Issue, error) {
 			created_at
 		FROM issues;
 		`,
+		ctx,
 		query.SnapshotReadOnlyTxControl(),
 		ydb.ParamsBuilder().Build(),
 		func(resultSet query.ResultSet, ctx context.Context) error {
 			for row, err := range sugar.UnmarshalRows[Issue](resultSet.Rows(ctx)) {
-				clear(result)
-
 				if err != nil {
+					clear(result)
 					return err
 				}
-
 				result = append(result, row)
 			}
 			return nil

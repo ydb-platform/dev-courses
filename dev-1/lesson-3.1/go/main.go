@@ -26,25 +26,28 @@ func main() {
 	schemaRepository := NewSchemaRepository(queryHelper)
 	issuesRepository := NewIssueRepository(queryHelper)
 
-	schemaRepository.DropSchema()
-	schemaRepository.CreateSchema()
+	queryCtx, queryCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer queryCancel()
 
-	firstIssue, err := issuesRepository.AddIssue("Ticket 1")
+	schemaRepository.DropSchema(queryCtx)
+	schemaRepository.CreateSchema(queryCtx)
+
+	firstIssue, err := issuesRepository.AddIssue(queryCtx, "Ticket 1")
 	if err != nil {
 		log.Fatalf("Some error happened (1): %v\n", err)
 	}
 
-	_, err = issuesRepository.AddIssue("Ticket 2")
+	_, err = issuesRepository.AddIssue(queryCtx, "Ticket 2")
 	if err != nil {
 		log.Fatalf("Some error happened (2): %v\n", err)
 	}
 
-	_, err = issuesRepository.AddIssue("Ticket 3")
+	_, err = issuesRepository.AddIssue(queryCtx, "Ticket 3")
 	if err != nil {
 		log.Fatalf("Some error happened (3): %v\n", err)
 	}
 
-	issues, err := issuesRepository.FindAll()
+	issues, err := issuesRepository.FindAll(queryCtx)
 	if err != nil {
 		log.Fatalf("Some error happened while finding all: %v\n", err)
 	}
@@ -52,10 +55,10 @@ func main() {
 		log.Printf("Issue: %v\n", issue)
 	}
 
-	searchFirstIssue, err := issuesRepository.FindById(firstIssue.Id)
+	foundFirstIssue, err := issuesRepository.FindById(queryCtx, firstIssue.Id)
 	if err != nil {
 		log.Fatal(err)
 	} else {
-		log.Printf("First issue: %v\n", searchFirstIssue)
+		log.Printf("First issue: %v\n", foundFirstIssue)
 	}
 }

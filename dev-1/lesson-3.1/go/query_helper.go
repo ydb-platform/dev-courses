@@ -11,7 +11,6 @@ import (
 
 type QueryHelper struct {
 	driver *ydb.Driver
-	ctx    context.Context
 }
 
 func NewQueryHelper(driver *ydb.Driver) *QueryHelper {
@@ -20,9 +19,10 @@ func NewQueryHelper(driver *ydb.Driver) *QueryHelper {
 	}
 }
 
-func (q *QueryHelper) Execute(yql string) error {
+func (q *QueryHelper) Execute(yql string, ctx context.Context) error {
 	return q.ExecuteTx(
 		yql,
+		ctx,
 		query.NoTx(),
 		ydb.ParamsBuilder().Build(),
 	)
@@ -30,11 +30,12 @@ func (q *QueryHelper) Execute(yql string) error {
 
 func (q *QueryHelper) ExecuteTx(
 	yql string,
+	ctx context.Context,
 	txControl *query.TransactionControl,
 	params ydb.Params,
 ) error {
 	return q.driver.Query().Do(
-		q.ctx,
+		ctx,
 		func(ctx context.Context, s query.Session) error {
 			err := s.Exec(
 				ctx,
@@ -49,12 +50,13 @@ func (q *QueryHelper) ExecuteTx(
 
 func (q *QueryHelper) Query(
 	yql string,
+	ctx context.Context,
 	txControl *query.TransactionControl,
 	params ydb.Params,
 	materializeFunc func(query.ResultSet, context.Context) error,
 ) error {
 	return q.driver.Query().Do(
-		q.ctx,
+		ctx,
 		func(ctx context.Context, s query.Session) error {
 			result, err := s.Query(
 				ctx,
@@ -79,7 +81,7 @@ func (q *QueryHelper) Query(
 					return err
 				}
 
-				materializeFunc(resultSet, q.ctx)
+				materializeFunc(resultSet, ctx)
 			}
 
 			return nil

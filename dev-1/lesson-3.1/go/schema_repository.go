@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 )
 
@@ -14,7 +15,7 @@ func NewSchemaRepository(query *QueryHelper) *SchemaRepository {
 	}
 }
 
-func (repo *SchemaRepository) CreateSchema() {
+func (repo *SchemaRepository) CreateSchema(ctx context.Context) {
 	err := repo.query.Execute(`
 		CREATE TABLE IF NOT EXISTS issues (
 			id Int64 NOT NULL,
@@ -23,14 +24,15 @@ func (repo *SchemaRepository) CreateSchema() {
 			PRIMARY KEY (id)
 		);
 		`,
+		ctx,
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func (repo *SchemaRepository) DropSchema() {
-	err := repo.query.Execute("DROP TABLE IF EXISTS issues;")
+func (repo *SchemaRepository) DropSchema(ctx context.Context) {
+	err := repo.query.Execute("DROP TABLE IF EXISTS issues;", ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
