@@ -21,10 +21,8 @@ func main() {
 	}
 	defer db.Close(connectionCtx)
 
-	queryHelper := NewQueryHelper(db)
-
-	schemaRepository := NewSchemaRepository(queryHelper)
-	issuesRepository := NewIssueRepository(queryHelper)
+	schemaRepository := NewSchemaRepository(db)
+	issuesRepository := NewIssueRepository(db)
 
 	queryCtx, queryCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer queryCancel()

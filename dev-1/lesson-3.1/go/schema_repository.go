@@ -3,17 +3,20 @@ package main
 import (
 	"context"
 	"log"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
 // Репозиторий для управления схемой базы данных YDB
 // Отвечает за создание и удаление таблиц
 type SchemaRepository struct {
-	query *QueryHelper
+	driver *ydb.Driver
 }
 
-func NewSchemaRepository(query *QueryHelper) *SchemaRepository {
+func NewSchemaRepository(driver *ydb.Driver) *SchemaRepository {
 	return &SchemaRepository{
-		query: query,
+		driver: driver,
 	}
 }
 
@@ -24,7 +27,9 @@ func NewSchemaRepository(query *QueryHelper) *SchemaRepository {
 // - created_at: время создания тикета
 // Все поля являются обязательными.
 func (repo *SchemaRepository) CreateSchema(ctx context.Context) {
-	err := repo.query.Execute(`
+	err := repo.driver.Query().Exec(
+		ctx,
+		`
 		CREATE TABLE IF NOT EXISTS issues (
 			id Int64 NOT NULL,
 			title Text NOT NULL,
@@ -32,7 +37,8 @@ func (repo *SchemaRepository) CreateSchema(ctx context.Context) {
 			PRIMARY KEY (id)
 		);
 		`,
-		ctx,
+		query.WithTxControl(query.NoTx()),
+		query.WithParameters(ydb.ParamsBuilder().Build()),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -42,7 +48,12 @@ func (repo *SchemaRepository) CreateSchema(ctx context.Context) {
 // Удаляет таблицу issues из базы данных
 // Используется для очистки схемы перед созданием новой
 func (repo *SchemaRepository) DropSchema(ctx context.Context) {
-	err := repo.query.Execute("DROP TABLE IF EXISTS issues;", ctx)
+	err := repo.driver.Query().Exec(
+		ctx,
+		"DROP TABLE IF EXISTS issues;",
+		query.WithTxControl(query.NoTx()),
+		query.WithParameters(ydb.ParamsBuilder().Build()),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

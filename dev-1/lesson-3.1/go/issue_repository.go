@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"math/rand"
 	"time"
 
@@ -20,12 +21,12 @@ var (
 // Репозиторий для работы с тикетами в базе данных YDB
 // Реализует операции добавления и чтения тикетов
 type IssueRepository struct {
-	query *QueryHelper
+	driver *ydb.Driver
 }
 
-func NewIssueRepository(query *QueryHelper) *IssueRepository {
+func NewIssueRepository(driver *ydb.Driver) *IssueRepository {
 	return &IssueRepository{
-		query: query,
+		driver: driver,
 	}
 }
 
@@ -40,21 +41,32 @@ func (repo *IssueRepository) AddIssue(ctx context.Context, title string) (*Issue
 
 	// Выполняем UPSERT запрос для добавления тикета
 	// Изменять данные можно только в режиме транзакции SERIALIZABLE_RW, поэтому используем его
-	err := repo.query.ExecuteTx(`
-		DECLARE $id AS Int64;
-		DECLARE $title AS Text;
-		DECLARE $created_at AS Timestamp;
-		
-		UPSERT INTO issues (id, title, created_at)
-		VALUES ($id, $title, $created_at);
-		`,
+	err := repo.driver.Query().Do(
 		ctx,
-		query.SerializableReadWriteTxControl(query.CommitTx()),
-		ydb.ParamsBuilder().
-			Param("$id").Int64(id).
-			Param("$title").Text(title).
-			Param("$created_at").Timestamp(timestamp).
-			Build(),
+		func(ctx context.Context, s query.Session) error {
+			err := s.Exec(
+				ctx,
+				`
+				DECLARE $id AS Int64;
+				DECLARE $title AS Text;
+				DECLARE $created_at AS Timestamp;
+				
+				UPSERT INTO issues (id, title, created_at)
+				VALUES ($id, $title, $created_at);
+				`,
+				query.WithTxControl(
+					query.SerializableReadWriteTxControl(query.CommitTx()),
+				),
+				query.WithParameters(
+					ydb.ParamsBuilder().
+						Param("$id").Int64(id).
+						Param("$title").Text(title).
+						Param("$created_at").Timestamp(timestamp).
+						Build(),
+				),
+			)
+			return err
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -72,88 +84,144 @@ func (repo *IssueRepository) AddIssue(ctx context.Context, title string) (*Issue
 // id  [int64] - id тикета
 // Возвращает найденный тикет или ошибку
 func (repo *IssueRepository) FindById(ctx context.Context, id int64) (*Issue, error) {
-	result := make([]Issue, 0)
+	resultIssues := make([]Issue, 0)
 
 	// Выполняем SELECT запрос в режиме [Snapshot Read-Only] для чтения данных
-    // Этот режим сообщает серверу, что эта транзакция только для чтения.
-    // Это позволяет снизить накладные расходы на подготовку к изменениям 
+	// Этот режим сообщает серверу, что эта транзакция только для чтения.
+	// Это позволяет снизить накладные расходы на подготовку к изменениям
 	// и просто читать данные из одного "слепка" базы данных.
-	repo.query.Query(`
-		SELECT
-			id,
-			title,
-			created_at
-		FROM issues
-		WHERE id=$id;
-		`,
+	err := repo.driver.Query().Do(
 		ctx,
-		query.SnapshotReadOnlyTxControl(),
-		ydb.ParamsBuilder().
-			Param("$id").Int64(id).
-			Build(),
-		func(resultSet query.ResultSet, ctx context.Context) error {
-			for row, err := range sugar.UnmarshalRows[Issue](resultSet.Rows(ctx)) {
-				// Если во время чтения результата возникла ошибка,
-				// то необходимо очистить уже прочитанные результаты, 
-				// чтобы избежать дублирования при следующем выполнении функции-ретраера
-				// и вернуть ретраеру ошибку
+		func(ctx context.Context, s query.Session) error {
+			// Если на предыдущих итерациях функции-ретраера
+			// возникла ошибка во время чтения результата,
+			// то необходимо очистить уже прочитанные результаты,
+			// чтобы избежать дублирования при следующем выполнении функции-ретраера
+			resultIssues = make([]Issue, 0)
+
+			queryResult, err := s.Query(
+				ctx,
+				`
+				SELECT
+					id,
+					title,
+					created_at
+				FROM issues
+				WHERE id=$id;
+				`,
+				query.WithTxControl(query.SnapshotReadOnlyTxControl()),
+				query.WithParameters(
+					ydb.ParamsBuilder().
+						Param("$id").Int64(id).
+						Build(),
+				),
+			)
+
+			if err != nil {
+				return err
+			}
+
+			defer func() { _ = queryResult.Close(ctx) }()
+
+			for {
+				resultSet, err := queryResult.NextResultSet(ctx)
 				if err != nil {
-					clear(result)
+					if errors.Is(err, io.EOF) {
+						break
+					}
+
 					return err
 				}
 
-				result = append(result, row)
+				for row, err := range sugar.UnmarshalRows[Issue](resultSet.Rows(ctx)) {
+					if err != nil {
+						return err
+					}
+
+					resultIssues = append(resultIssues, row)
+				}
 			}
+
 			return nil
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	if len(result) > 1 {
+	if len(resultIssues) > 1 {
 		return nil, errors.New("Multiple rows with the same id (lol)")
 	}
-	if len(result) == 0 {
+	if len(resultIssues) == 0 {
 		return nil, errors.New("Did not find any issues")
 	}
-	return &result[0], nil
+	return &resultIssues[0], nil
 }
 
 // Получает все тикеты из базы данных
 // ctx [context.Context] - контекст для управления исполнением запроса (например, можно задать таймаут)
 func (repo *IssueRepository) FindAll(ctx context.Context) ([]Issue, error) {
-	result := make([]Issue, 0)
+	resultIssues := make([]Issue, 0)
 
 	// Выполняем SELECT запрос в режиме [Snapshot Read-Only] для чтения данных
-    // Этот режим сообщает серверу, что эта транзакция только для чтения.
-    // Это позволяет снизить накладные расходы на подготовку к изменениям 
+	// Этот режим сообщает серверу, что эта транзакция только для чтения.
+	// Это позволяет снизить накладные расходы на подготовку к изменениям
 	// и просто читать данные из одного "слепка" базы данных.
-	err := repo.query.Query(`
-		SELECT
-			id,
-			title,
-			created_at
-		FROM issues;
-		`,
+	err := repo.driver.Query().Do(
 		ctx,
-		query.SnapshotReadOnlyTxControl(),
-		ydb.ParamsBuilder().Build(),
-		func(resultSet query.ResultSet, ctx context.Context) error {
-			for row, err := range sugar.UnmarshalRows[Issue](resultSet.Rows(ctx)) {
-				// Если во время чтения результата возникла ошибка,
-				// то необходимо очистить уже прочитанные результаты, 
-				// чтобы избежать дублирования при следующем выполнении функции-ретраера
-				// и вернуть ретраеру ошибку
+		func(ctx context.Context, s query.Session) error {
+			// Если на предыдущих итерациях функции-ретраера
+			// возникла ошибка во время чтения результата,
+			// то необходимо очистить уже прочитанные результаты,
+			// чтобы избежать дублирования при следующем выполнении функции-ретраера
+			resultIssues = make([]Issue, 0)
+
+			queryResult, err := s.Query(
+				ctx,
+				`
+				SELECT
+					id,
+					title,
+					created_at
+				FROM issues;
+				`,
+				query.WithTxControl(query.SnapshotReadOnlyTxControl()),
+				query.WithParameters(
+					ydb.ParamsBuilder().Build(),
+				),
+			)
+
+			if err != nil {
+				return err
+			}
+
+			defer func() { _ = queryResult.Close(ctx) }()
+
+			for {
+				resultSet, err := queryResult.NextResultSet(ctx)
 				if err != nil {
-					clear(result)
+					if errors.Is(err, io.EOF) {
+						break
+					}
+
 					return err
 				}
-				result = append(result, row)
+
+				for row, err := range sugar.UnmarshalRows[Issue](resultSet.Rows(ctx)) {
+					if err != nil {
+						return err
+					}
+
+					resultIssues = append(resultIssues, row)
+				}
 			}
+
 			return nil
 		},
 	)
 	if err != nil {
-		return result, err
+		return resultIssues, err
 	}
 
-	return result, nil
+	return resultIssues, nil
 }
