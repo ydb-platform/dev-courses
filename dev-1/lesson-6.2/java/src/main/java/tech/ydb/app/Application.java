@@ -180,10 +180,10 @@ public class Application {
                     );
 
                     var resultSet = queryReader.getResultSet(0);
-                    var lastOffset = resultSet.next() ? resultSet.getColumn(0).getInt64() : 0;
+                    var lastOffset = resultSet.next() ? resultSet.getColumn(0).getInt64() : -1;
 
                     // Если сообщение уже было обработано, пропускаем его
-                    if (lastOffset > message.getOffset()) {
+                    if (lastOffset >= message.getOffset()) {
                         message.commit().join();
                         curTx.rollback().join();
 
