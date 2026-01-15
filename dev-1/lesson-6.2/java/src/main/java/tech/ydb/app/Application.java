@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.ydb.common.transaction.TxMode;
+import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
@@ -80,13 +81,12 @@ public class Application {
             var lines = Files.readAllLines(pathFile);
 
             // Запускаем фоновое чтение строк из топика
-            var readerJob = CompletableFuture.runAsync(() -> runReadJob(lines.size(), reader, retryCtx));
+            var readerJob = CompletableFuture.runAsync(() -> runReadJob(reader, retryCtx));
 
             // Получаем номер последней обработанной строки из таблицы прогресса
             var queryReader = queryServiceHelper.executeQuery("""
                             DECLARE $name AS Text;
-                            SELECT line_num FROM write_file_progress
-                            WHERE name = $name;
+                            SELECT line_num FROM write_file_progress WHERE name = $name;
                             """,
                     TxMode.SERIALIZABLE_RW,
                     Params.of("$name", PrimitiveValue.newText(pathFile.toString()))
@@ -125,7 +125,6 @@ public class Application {
                         queryServiceHelper.executeQuery("""
                                         DECLARE $name AS Text;
                                         DECLARE $line_num AS Int64;
-                                        
                                         UPSERT INTO write_file_progress(name, line_num) VALUES ($name, $line_num);
                                         """,
                                 TxMode.SERIALIZABLE_RW,
@@ -135,6 +134,12 @@ public class Application {
                     }
             );
 
+            writer.send(Message.newBuilder()
+                    .setSeqNo(lineNumber.getAndIncrement())
+                    .setData("STOP".getBytes(StandardCharsets.UTF_8))
+                    .build()
+            );
+            writer.flush();
 
             readerJob.join();
             printTableFile(queryServiceHelper);
@@ -144,10 +149,11 @@ public class Application {
         }
     }
 
-    private static void runReadJob(int linesCount, SyncReader reader, SessionRetryContext retryCtx) {
+    private static void runReadJob(SyncReader reader, SessionRetryContext retryCtx) {
         LOGGER.info("Started read worker!");
 
-        for (int i = 0; i < linesCount; i++) {
+        var next = true;
+        for (int i = 0; next; i++) {
             try {
                 var message = reader.receive(10, TimeUnit.SECONDS);
 
@@ -159,7 +165,7 @@ public class Application {
                 // обрабатывать и сохранять прогресс. Эти операции должны быть атомарными, чтобы
                 // избежать ситуации, когда одно и тоже сообщение будет обработано несколько раз.
                 final int finalI = i;
-                retryCtx.supplyStatus(session -> {
+                next = retryCtx.supplyResult(session -> {
                     var curTx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
                     var tx = new TransactionHelper(curTx);
                     assert message != null;
@@ -167,11 +173,10 @@ public class Application {
 
                     // Проверяем, не обрабатывали ли мы уже это сообщение
                     var queryReader = tx.executeQuery("""
-                                        DECLARE $partition_id AS Int64;
-                                        SELECT last_offset FROM file_progress
-                                        WHERE partition_id = $partition_id;
-                                    """,
-                            Params.of("$partition_id", PrimitiveValue.newInt64(partitionId))
+                            DECLARE $partition_id AS Int64;
+                            SELECT last_offset FROM file_progress
+                            WHERE partition_id = $partition_id;
+                            """, Params.of("$partition_id", PrimitiveValue.newInt64(partitionId))
                     );
 
                     var resultSet = queryReader.getResultSet(0);
@@ -182,10 +187,17 @@ public class Application {
                         message.commit().join();
                         curTx.rollback().join();
 
-                        return CompletableFuture.completedFuture(Status.SUCCESS);
+                        return CompletableFuture.completedFuture(Result.success(true));
                     }
 
-                    var messageData = new String(message.getData(), StandardCharsets.UTF_8).split(":");
+                    var messageStr = new String(message.getData(), StandardCharsets.UTF_8);
+                    if (messageStr.equals("STOP")) {
+                        LOGGER.info("Stopped read worker!");
+
+                        return CompletableFuture.completedFuture(Result.success(false));
+                    }
+
+                    var messageData = messageStr.split(":");
                     var name = messageData[0];
                     var length = messageData[1].length();
 
@@ -219,21 +231,19 @@ public class Application {
                                     """,
                             Params.of(
                                     "$partition_id", PrimitiveValue.newInt64(partitionId),
-                                    "$last_offset", PrimitiveValue.newInt64(lastOffset)
+                                    "$last_offset", PrimitiveValue.newInt64(message.getOffset())
                             )
                     );
 
                     message.commit().join();
 
-                    return CompletableFuture.completedFuture(Status.SUCCESS);
-                }).join().expectSuccess();
+                    return CompletableFuture.completedFuture(Result.success(true));
+                }).join().getValue();
 
             } catch (Exception e) {
                 LOGGER.error(e.getMessage());
             }
         }
-
-        LOGGER.info("Stopped read worker!");
     }
 
     private static void printTableFile(QueryServiceHelper queryServiceHelper) {
