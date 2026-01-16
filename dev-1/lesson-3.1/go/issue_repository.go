@@ -98,7 +98,7 @@ func (repo *IssueRepository) FindById(ctx context.Context, id int64) (*Issue, er
 			queryResult, err := s.Query(
 				ctx,
 				`
-                DECLARE $id Int64;
+                DECLARE $id AS Int64;
                  
 				SELECT
 					id,
