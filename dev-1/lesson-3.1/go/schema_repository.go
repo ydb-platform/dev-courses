@@ -37,7 +37,6 @@ func (repo *SchemaRepository) CreateSchema(ctx context.Context) {
 			PRIMARY KEY (id)
 		);
 		`,
-		query.WithTxControl(query.NoTx()),
 		query.WithParameters(ydb.ParamsBuilder().Build()),
 	)
 	if err != nil {
@@ -51,7 +50,6 @@ func (repo *SchemaRepository) DropSchema(ctx context.Context) {
 	err := repo.driver.Query().Exec(
 		ctx,
 		"DROP TABLE IF EXISTS issues;",
-		query.WithTxControl(query.NoTx()),
 		query.WithParameters(ydb.ParamsBuilder().Build()),
 	)
 	if err != nil {

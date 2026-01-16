@@ -40,7 +40,6 @@ func (repo *IssueRepository) AddIssue(ctx context.Context, title string) (*Issue
 	timestamp := time.Now()
 
 	// Выполняем UPSERT запрос для добавления тикета
-	// Изменять данные можно только в режиме транзакции SERIALIZABLE_RW, поэтому используем его
 	err := repo.driver.Query().Do(
 		ctx,
 		func(ctx context.Context, s query.Session) error {
@@ -54,9 +53,6 @@ func (repo *IssueRepository) AddIssue(ctx context.Context, title string) (*Issue
 				UPSERT INTO issues (id, title, created_at)
 				VALUES ($id, $title, $created_at);
 				`,
-				query.WithTxControl(
-					query.SerializableReadWriteTxControl(query.CommitTx()),
-				),
 				query.WithParameters(
 					ydb.ParamsBuilder().
 						Param("$id").Int64(id).
@@ -102,6 +98,8 @@ func (repo *IssueRepository) FindById(ctx context.Context, id int64) (*Issue, er
 			queryResult, err := s.Query(
 				ctx,
 				`
+                DECLARE $id Int64;
+                 
 				SELECT
 					id,
 					title,
@@ -173,7 +171,7 @@ func (repo *IssueRepository) FindAll(ctx context.Context) ([]Issue, error) {
 			// Если на предыдущих итерациях функции-ретраера
 			// возникла ошибка во время чтения результата,
 			// то необходимо очистить уже прочитанные результаты,
-			// чтобы избежать дублирования при следующем выполнении функции-ретраера
+			// чтобы избежать смешивания результатов текущей и предыдущей попыток выполнения запросов при ретраях
 			resultIssues = make([]Issue, 0)
 
 			queryResult, err := s.Query(
